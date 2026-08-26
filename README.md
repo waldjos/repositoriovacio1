@@ -1,6 +1,8 @@
-# Factura Local PWA
+# ZiviFactura
 
 PWA local-first para crear, editar, guardar y compartir facturas, proformas y presupuestos desde el navegador.
+
+Desarrollada por **Zivi Dynamics C.A.** · RIF: **J-508175123** · https://zividynamics.com
 
 ## Funciones
 
@@ -13,6 +15,7 @@ PWA local-first para crear, editar, guardar y compartir facturas, proformas y pr
 - PWA instalable y funcionamiento offline después de la primera carga.
 - Respaldo y restauración JSON.
 - Datos de empresa, logo, moneda, impuesto y numeración configurables.
+- Pie de documento con la identificación de Zivi Dynamics C.A. y enlace a zividynamics.com.
 
 ## Desarrollo
 
