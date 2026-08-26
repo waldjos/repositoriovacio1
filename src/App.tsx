@@ -11,6 +11,7 @@ const labels: Record<InvoiceStatus, string> = { draft: 'Borrador', issued: 'Emit
 const today = () => new Date().toISOString().slice(0, 10)
 const uid = () => Math.random().toString(36).slice(2, 10)
 const numberFor = (c: Company) => `${c.prefix || 'FAC'}-${String(c.nextInvoiceNumber || 1).padStart(6, '0')}`
+const MAX_LOGO_BYTES = 10 * 1024 * 1024
 
 function blank(c: Company): Invoice {
   const now = new Date().toISOString()
@@ -142,19 +143,36 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
   }
 
   const download = () => buildInvoicePdf(invoice, company).save(`${invoice.number}.pdf`)
+  const message = `Hola ${invoice.client.name}. Te comparto ${invoice.type.toLowerCase()} ${invoice.number} por un total de ${money(sum.total, invoice.currency)}. Gracias por tu preferencia.`
+
   const share = async () => {
     if (!invoice.client.name.trim()) return notify('Completa el cliente antes de compartir.')
     const file = pdfFile(invoice, company)
     const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean }
     if (navigator.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
-      try { await navigator.share({ title: invoice.number, text: `${invoice.type} ${invoice.number}`, files: [file] }) } catch { }
+      try { await navigator.share({ title: `${invoice.type} ${invoice.number}`, text: message, files: [file] }) } catch { }
     } else { download(); notify('PDF descargado. Puedes adjuntarlo manualmente.') }
   }
-  const whatsapp = () => {
+
+  const whatsapp = async () => {
+    if (!invoice.client.name.trim()) return notify('Completa el cliente antes de compartir.')
+    const file = pdfFile(invoice, company)
+    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean }
+    if (navigator.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
+      try {
+        await navigator.share({ title: `${invoice.type} ${invoice.number}`, text: message, files: [file] })
+        return
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+      }
+    }
     const phone = invoice.client.phone.replace(/\D/g, '')
-    const text = encodeURIComponent(`Hola ${invoice.client.name}. Te comparto ${invoice.type.toLowerCase()} ${invoice.number} por un total de ${money(sum.total, invoice.currency)}.`)
+    const text = encodeURIComponent(message)
+    download()
     window.open(phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`, '_blank', 'noopener,noreferrer')
+    notify('Tu navegador no permite adjuntar el PDF directamente. Se descargó el archivo para que puedas adjuntarlo.')
   }
+
   const email = () => {
     const subject = encodeURIComponent(`${invoice.type} ${invoice.number}`)
     const body = encodeURIComponent(`Hola ${invoice.client.name},\n\nTe comparto ${invoice.type.toLowerCase()} ${invoice.number} por un total de ${money(sum.total, invoice.currency)}.\n\nSaludos.`)
@@ -173,11 +191,43 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
       <section className="card formCard"><h2>2. Cliente</h2>{clients.length > 0 && <Field label="Cliente guardado"><select defaultValue="" onChange={e => { const c = clients.find(x => String(x.id) === e.target.value); if (c) setInvoice(p => ({ ...p, clientId: c.id, client: { name: c.name, taxId: c.taxId, phone: c.phone, email: c.email, address: c.address } })) }}><option value="">Seleccionar…</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>}
         <div className="grid2"><Field label="Nombre / razón social"><input value={invoice.client.name} onChange={e => setClient('name', e.target.value)}/></Field><Field label="RIF / RUC / C.I."><input value={invoice.client.taxId} onChange={e => setClient('taxId', e.target.value)}/></Field><Field label="Teléfono"><input value={invoice.client.phone} onChange={e => setClient('phone', e.target.value)} placeholder="Incluye código de país"/></Field><Field label="Correo"><input type="email" value={invoice.client.email} onChange={e => setClient('email', e.target.value)}/></Field><Field label="Dirección" wide><input value={invoice.client.address} onChange={e => setClient('address', e.target.value)}/></Field></div>
       </section>
-      <section className="card formCard"><h2>3. Productos o servicios</h2><div className="items"><div className="itemLabels"><span>Descripción</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div>{invoice.items.map(item => <div className="item" key={item.id}><input value={item.description} onChange={e => setItem(item.id, { description: e.target.value })} placeholder="Descripción"/><input type="number" min="0" step="0.01" value={item.quantity} onChange={e => setItem(item.id, { quantity: Number(e.target.value) })}/><input type="number" min="0" step="0.01" value={item.unitPrice} onChange={e => setItem(item.id, { unitPrice: Number(e.target.value) })}/><strong>{money(item.quantity * item.unitPrice, invoice.currency)}</strong><button className="danger icon" disabled={invoice.items.length === 1} onClick={() => set('items', invoice.items.filter(x => x.id !== item.id))}><Trash2 size={17}/></button></div>)}</div><button className="secondary add" onClick={() => set('items', [...invoice.items, { id: uid(), description: '', quantity: 1, unitPrice: 0 }])}><Plus size={18}/>Agregar línea</button></section>
-      <section className="card formCard"><h2>4. Pago y notas</h2><div className="grid2"><Field label="Forma de pago"><input value={invoice.paymentMethod} onChange={e => set('paymentMethod', e.target.value)} placeholder="Efectivo, transferencia, tarjeta…"/></Field><Field label="Moneda"><select value={invoice.currency} onChange={e => set('currency', e.target.value)}><option>USD</option><option>EUR</option><option>VES</option><option>COP</option></select></Field><Field label="Descuento"><input type="number" min="0" step="0.01" value={invoice.discount} onChange={e => set('discount', Number(e.target.value))}/></Field><Field label="IVA / impuesto %"><input type="number" min="0" step="0.01" value={invoice.taxRate} onChange={e => set('taxRate', Number(e.target.value))}/></Field><Field label="Observaciones" wide><textarea rows={3} value={invoice.notes} onChange={e => set('notes', e.target.value)}/></Field></div></section>
+      <section className="card formCard"><h2>3. Productos o servicios</h2><div className="items"><div className="itemLabels"><span>Descripción</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div>{invoice.items.map(item => <div className="item" key={item.id}><input value={item.description} onChange={e => setItem(item.id, { description: e.target.value })} placeholder="Descripción"/><NumericInput value={item.quantity} onChange={value => setItem(item.id, { quantity: value })}/><NumericInput value={item.unitPrice} onChange={value => setItem(item.id, { unitPrice: value })}/><strong>{money(item.quantity * item.unitPrice, invoice.currency)}</strong><button className="danger icon" disabled={invoice.items.length === 1} onClick={() => set('items', invoice.items.filter(x => x.id !== item.id))}><Trash2 size={17}/></button></div>)}</div><button className="secondary add" onClick={() => set('items', [...invoice.items, { id: uid(), description: '', quantity: 1, unitPrice: 0 }])}><Plus size={18}/>Agregar línea</button></section>
+      <section className="card formCard"><h2>4. Pago y notas</h2><div className="grid2"><Field label="Forma de pago"><input value={invoice.paymentMethod} onChange={e => set('paymentMethod', e.target.value)} placeholder="Efectivo, transferencia, tarjeta…"/></Field><Field label="Moneda"><select value={invoice.currency} onChange={e => set('currency', e.target.value)}><option>USD</option><option>EUR</option><option>VES</option><option>COP</option></select></Field><Field label="Descuento"><NumericInput value={invoice.discount} onChange={value => set('discount', value)}/></Field><Field label="IVA / impuesto %"><NumericInput value={invoice.taxRate} onChange={value => set('taxRate', value)}/></Field><Field label="Observaciones" wide><textarea rows={3} value={invoice.notes} onChange={e => set('notes', e.target.value)}/></Field></div></section>
     </section>
-    <aside className="summary card"><span>RESUMEN</span><Line label="Subtotal" value={money(sum.subtotal, invoice.currency)}/><Line label="Descuento" value={`- ${money(sum.discount, invoice.currency)}`}/><Line label={`Impuesto ${invoice.taxRate}%`} value={money(sum.tax, invoice.currency)}/><div className="total"><span>Total</span><strong>{money(sum.total, invoice.currency)}</strong></div><button className="primary full" disabled={saving} onClick={() => save('issued')}><Check size={18}/>{saving ? 'Guardando…' : 'Guardar y emitir'}</button><button className="secondary full" disabled={saving} onClick={() => save('draft')}><Save size={18}/>Guardar borrador</button><hr/><button className="secondary full" onClick={share}><Share2 size={18}/>Compartir PDF</button><button className="secondary full whatsapp" onClick={whatsapp}><Send size={18}/>Abrir WhatsApp</button><button className="secondary full" onClick={email}><Mail size={18}/>Preparar correo</button><button className="ghost full" onClick={download}><Download size={18}/>Descargar PDF</button><small>El PDF se genera localmente; no enviamos tus facturas a un servidor.</small></aside>
+    <aside className="summary card"><span>RESUMEN</span><Line label="Subtotal" value={money(sum.subtotal, invoice.currency)}/><Line label="Descuento" value={`- ${money(sum.discount, invoice.currency)}`}/><Line label={`Impuesto ${invoice.taxRate}%`} value={money(sum.tax, invoice.currency)}/><div className="total"><span>Total</span><strong>{money(sum.total, invoice.currency)}</strong></div><button className="primary full" disabled={saving} onClick={() => save('issued')}><Check size={18}/>{saving ? 'Guardando…' : 'Guardar y emitir'}</button><button className="secondary full" disabled={saving} onClick={() => save('draft')}><Save size={18}/>Guardar borrador</button><hr/><button className="secondary full" onClick={share}><Share2 size={18}/>Compartir PDF</button><button className="secondary full whatsapp" onClick={whatsapp}><Send size={18}/>Enviar por WhatsApp</button><button className="secondary full" onClick={email}><Mail size={18}/>Preparar correo</button><button className="ghost full" onClick={download}><Download size={18}/>Descargar PDF</button><small>En móviles compatibles, WhatsApp recibe el mensaje y el PDF juntos mediante el menú de compartir del sistema.</small></aside>
   </div>
+}
+
+function NumericInput({ value, onChange, min = 0, step = '0.01' }: { value: number; onChange: (value: number) => void; min?: number; step?: string }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [draft, setDraft] = useState(String(value))
+
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setDraft(String(value))
+  }, [value])
+
+  return <input
+    ref={inputRef}
+    type="number"
+    inputMode="decimal"
+    min={min}
+    step={step}
+    value={draft}
+    onFocus={() => { if (Number(draft) === 0) setDraft('') }}
+    onChange={e => {
+      const raw = e.target.value
+      setDraft(raw)
+      if (raw.trim() === '') return
+      const parsed = Number(raw)
+      if (Number.isFinite(parsed)) onChange(Math.max(min, parsed))
+    }}
+    onBlur={() => {
+      const parsed = Number(draft)
+      const next = draft.trim() === '' || !Number.isFinite(parsed) ? min : Math.max(min, parsed)
+      onChange(next)
+      setDraft(String(next))
+    }}
+  />
 }
 
 function Line({ label, value }: { label: string; value: string }) { return <div className="line"><span>{label}</span><strong>{value}</strong></div> }
@@ -188,13 +238,20 @@ function SettingsView({ company, installPrompt, notify, onChanged, onInstalled }
   const fileRef = useRef<HTMLInputElement>(null)
   useEffect(() => setForm(company), [company])
   async function save() { await db.company.put({ ...form, id: 1, nextInvoiceNumber: Math.max(1, Number(form.nextInvoiceNumber) || 1), defaultTaxRate: Math.max(0, Number(form.defaultTaxRate) || 0) }); await onChanged(); notify('Configuración guardada.') }
-  function logo(file?: File) { if (!file) return; if (file.size > 1500000) return notify('Usa un logo menor a 1,5 MB.'); const r = new FileReader(); r.onload = () => setForm(p => ({ ...p, logoDataUrl: String(r.result) })); r.readAsDataURL(file) }
+  function logo(file?: File) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) return notify('Selecciona un archivo de imagen válido.')
+    if (file.size > MAX_LOGO_BYTES) return notify('Usa un logo de hasta 10 MB.')
+    const r = new FileReader()
+    r.onload = () => { setForm(p => ({ ...p, logoDataUrl: String(r.result) })); notify('Logo cargado.') }
+    r.readAsDataURL(file)
+  }
   async function backup() { const data = await exportBackup(); const b = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = `factura-local-backup-${today()}.json`; a.click(); URL.revokeObjectURL(u); notify('Respaldo exportado.') }
   async function restore(file?: File) { if (!file) return; try { const data = JSON.parse(await file.text()) as BackupData; if (!confirm('Esto reemplazará los datos locales actuales. ¿Continuar?')) return; await importBackup(data); await onChanged(); notify('Respaldo restaurado.') } catch { notify('El archivo de respaldo no es válido.') } }
   async function install() { if (!installPrompt) return notify('Usa “Agregar a pantalla de inicio” desde el menú del navegador.'); await installPrompt.prompt(); await installPrompt.userChoice; onInstalled() }
   async function persist() { if (!navigator.storage?.persist) return notify('Este navegador no ofrece esta función.'); notify(await navigator.storage.persist() ? 'Almacenamiento persistente activado.' : 'El navegador no concedió persistencia.') }
 
-  return <div className="settingsGrid"><section className="card formCard"><div className="cardHead"><div><h1>Configuración de empresa</h1><p>Estos datos aparecerán en tus documentos PDF.</p></div></div><div className="logoRow"><div className="logoPreview">{form.logoDataUrl ? <img src={form.logoDataUrl} alt="Logo"/> : <ReceiptText size={30}/>}</div><label className="secondary file"><Upload size={18}/>Subir logo<input type="file" accept="image/*" onChange={e => logo(e.target.files?.[0])}/></label></div><div className="grid2"><Field label="Empresa"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></Field><Field label="RIF / RUC"><input value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })}/></Field><Field label="Teléfono"><input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}/></Field><Field label="Correo"><input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}/></Field><Field label="Dirección" wide><input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}/></Field><Field label="Ciudad"><input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}/></Field><Field label="Moneda"><select value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })}><option>USD</option><option>EUR</option><option>VES</option><option>COP</option></select></Field><Field label="Impuesto predeterminado %"><input type="number" value={form.defaultTaxRate} onChange={e => setForm({ ...form, defaultTaxRate: Number(e.target.value) })}/></Field><Field label="Prefijo"><input value={form.prefix} onChange={e => setForm({ ...form, prefix: e.target.value.toUpperCase().slice(0, 8) })}/></Field><Field label="Próximo número"><input type="number" min="1" value={form.nextInvoiceNumber} onChange={e => setForm({ ...form, nextInvoiceNumber: Number(e.target.value) })}/></Field></div><button className="primary" onClick={save}><Save size={18}/>Guardar configuración</button></section>
+  return <div className="settingsGrid"><section className="card formCard"><div className="cardHead"><div><h1>Configuración de empresa</h1><p>Estos datos aparecerán en tus documentos PDF.</p></div></div><div className="logoRow"><div className="logoPreview">{form.logoDataUrl ? <img src={form.logoDataUrl} alt="Logo"/> : <ReceiptText size={30}/>}</div><label className="secondary file"><Upload size={18}/>Subir logo<input type="file" accept="image/*" onChange={e => logo(e.target.files?.[0])}/></label><small>PNG, JPG o imagen compatible · máximo 10 MB</small></div><div className="grid2"><Field label="Empresa"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></Field><Field label="RIF / RUC"><input value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })}/></Field><Field label="Teléfono"><input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}/></Field><Field label="Correo"><input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}/></Field><Field label="Dirección" wide><input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}/></Field><Field label="Ciudad"><input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}/></Field><Field label="Moneda"><select value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })}><option>USD</option><option>EUR</option><option>VES</option><option>COP</option></select></Field><Field label="Impuesto predeterminado %"><NumericInput value={form.defaultTaxRate} onChange={value => setForm({ ...form, defaultTaxRate: value })}/></Field><Field label="Prefijo"><input value={form.prefix} onChange={e => setForm({ ...form, prefix: e.target.value.toUpperCase().slice(0, 8) })}/></Field><Field label="Próximo número"><NumericInput value={form.nextInvoiceNumber} min={1} step="1" onChange={value => setForm({ ...form, nextInvoiceNumber: Math.round(value) })}/></Field></div><button className="primary" onClick={save}><Save size={18}/>Guardar configuración</button></section>
     <aside className="tools"><section className="card tool"><ArchiveRestore/><h2>Copia de seguridad</h2><p>Exporta facturas, clientes y configuración a un archivo JSON.</p><button className="secondary full" onClick={backup}><Download size={18}/>Exportar respaldo</button><button className="secondary full" onClick={() => fileRef.current?.click()}><ArchiveRestore size={18}/>Restaurar respaldo</button><input ref={fileRef} hidden type="file" accept="application/json" onChange={e => restore(e.target.files?.[0])}/></section><section className="card tool"><Download/><h2>Instalar PWA</h2><p>Agrega la aplicación a la pantalla de inicio y úsala como una app.</p><button className="primary full" onClick={install}><Download size={18}/>Instalar</button></section><section className="card tool"><Save/><h2>Conservar datos</h2><p>Solicita prioridad para que el navegador no elimine el almacenamiento local automáticamente.</p><button className="secondary full" onClick={persist}><Check size={18}/>Solicitar persistencia</button></section></aside>
   </div>
 }
