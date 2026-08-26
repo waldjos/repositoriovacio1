@@ -1,0 +1,71 @@
+export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'cancelled'
+export type InvoiceType = 'Factura' | 'Proforma' | 'Presupuesto'
+
+export interface Company {
+  id: number
+  name: string
+  taxId: string
+  phone: string
+  email: string
+  address: string
+  city: string
+  currency: string
+  defaultTaxRate: number
+  nextInvoiceNumber: number
+  prefix: string
+  logoDataUrl?: string
+}
+
+export interface Client {
+  id?: number
+  name: string
+  taxId: string
+  phone: string
+  email: string
+  address: string
+  createdAt: string
+}
+
+export interface Product {
+  id?: number
+  name: string
+  price: number
+  description?: string
+  createdAt: string
+}
+
+export interface InvoiceItem {
+  id: string
+  description: string
+  quantity: number
+  unitPrice: number
+}
+
+export interface Invoice {
+  id?: number
+  number: string
+  type: InvoiceType
+  status: InvoiceStatus
+  date: string
+  dueDate: string
+  city: string
+  clientId?: number
+  client: Omit<Client, 'id' | 'createdAt'>
+  items: InvoiceItem[]
+  discount: number
+  taxRate: number
+  paymentMethod: string
+  notes: string
+  currency: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BackupData {
+  version: 1
+  exportedAt: string
+  company: Company[]
+  clients: Client[]
+  products: Product[]
+  invoices: Invoice[]
+}
