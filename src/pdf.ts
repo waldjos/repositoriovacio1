@@ -118,9 +118,18 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
     doc.text(doc.splitTextToSize(invoice.notes, 500), 42, bottomY + 59)
   }
 
+  const footerY = 806
+  const footerPrefix = 'Creado por Zivi Dynamics C.A. · RIF: J-508175123 · '
+  const website = 'zividynamics.com'
+  doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
-  doc.setTextColor(130)
-  doc.text('Documento generado con Factura Local', 42, 806)
+  doc.setTextColor(120)
+  doc.text(footerPrefix, 42, footerY)
+  const linkX = 42 + doc.getTextWidth(footerPrefix)
+  doc.setTextColor(...teal)
+  doc.textWithLink(website, linkX, footerY, { url: 'https://zividynamics.com' })
+  doc.setDrawColor(...teal)
+  doc.line(linkX, footerY + 1.5, linkX + doc.getTextWidth(website), footerY + 1.5)
   return doc
 }
 
