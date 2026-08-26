@@ -32,3 +32,5 @@ npm run preview
 ```
 
 El proyecto genera una SPA estática compatible con Vercel.
+
+Último redepliegue de producción solicitado tras el cambio de nombre del proyecto a **zivifactura**.
