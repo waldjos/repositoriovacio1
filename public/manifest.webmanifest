@@ -1,6 +1,6 @@
 {
-  "name": "Factura Local",
-  "short_name": "FacturaLocal",
+  "name": "ZiviFactura",
+  "short_name": "ZiviFactura",
   "description": "Crea, guarda y comparte facturas desde tu dispositivo.",
   "start_url": "/",
   "display": "standalone",
