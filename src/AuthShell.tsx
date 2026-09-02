@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Cloud, CloudOff, LogOut, ShieldCheck } from 'lucide-react'
+import { BarChart3, CheckCircle2, Cloud, CloudOff, LogOut, ReceiptText, ShieldCheck, Wallet } from 'lucide-react'
+import AdminDashboard from './AdminDashboard'
 import App from './App'
 import { db, ensureCompany } from './db'
 import { firebaseConfigured, observeAuth, signInWithGoogle, signOutFirebase, type FirebaseUser } from './firebase'
 import { startFirebaseSync, syncFirebaseNow, type SyncState } from './firebaseSync'
 import './auth.css'
+import './admin.css'
 
 const LOCAL_UID_KEY = 'zivifactura.firebase.uid'
+type Workspace = 'billing' | 'income' | 'stats'
 
 async function prepareLocalAccount(uid: string) {
   const previousUid = localStorage.getItem(LOCAL_UID_KEY)
@@ -87,6 +90,18 @@ function AccountBar({ user, state, message, onLogout }: { user: FirebaseUser; st
   </div>
 }
 
+function WorkspaceShell() {
+  const [workspace, setWorkspace] = useState<Workspace>('billing')
+  return <>
+    <nav className="workspaceNav" aria-label="Áreas administrativas">
+      <button className={workspace === 'billing' ? 'active' : ''} onClick={() => setWorkspace('billing')}><ReceiptText size={17}/>Facturación</button>
+      <button className={workspace === 'income' ? 'active' : ''} onClick={() => setWorkspace('income')}><Wallet size={17}/>Ingresos</button>
+      <button className={workspace === 'stats' ? 'active' : ''} onClick={() => setWorkspace('stats')}><BarChart3 size={17}/>Estadísticas</button>
+    </nav>
+    {workspace === 'billing' ? <App/> : <AdminDashboard view={workspace}/>} 
+  </>
+}
+
 export default function AuthShell() {
   const [user, setUser] = useState<FirebaseUser | null>(null)
   const [authReady, setAuthReady] = useState(!firebaseConfigured)
@@ -124,13 +139,13 @@ export default function AuthShell() {
     await signOutFirebase()
   }
 
-  if (!firebaseConfigured || localOnly) return <><App/><footer className="appLegalFooter"><LegalLinks compact/></footer></>
+  if (!firebaseConfigured || localOnly) return <><WorkspaceShell/><footer className="appLegalFooter"><LegalLinks compact/></footer></>
   if (!authReady) return <main className="authLoading"><div className="authSpinner"/><strong>Preparando ZiviFactura…</strong></main>
   if (!user) return <LoginScreen onLocal={() => setLocalOnly(true)}/>
 
   return <>
     <AccountBar user={user} state={syncState} message={syncMessage} onLogout={logout}/>
-    <App/>
+    <WorkspaceShell/>
     <footer className="appLegalFooter"><LegalLinks compact/></footer>
   </>
 }
