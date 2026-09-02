@@ -23,21 +23,27 @@ const statusLabel = (status: Invoice['status']) => ({ draft: 'BORRADOR', issued:
 export function buildInvoicePdf(invoice: Invoice, company: Company) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const { subtotal, discount, tax, total } = totals(invoice)
-  const teal = [15, 118, 110] as [number, number, number]
-  const tealDark = [10, 88, 82] as [number, number, number]
-  const ink = [26, 39, 46] as [number, number, number]
-  const muted = [103, 116, 124] as [number, number, number]
-  const soft = [243, 248, 247] as [number, number, number]
+  const blue = [37, 99, 235] as [number, number, number]
+  const navy = [11, 22, 51] as [number, number, number]
+  const cyan = [6, 182, 212] as [number, number, number]
+  const ink = [24, 36, 57] as [number, number, number]
+  const muted = [104, 117, 138] as [number, number, number]
+  const soft = [245, 248, 253] as [number, number, number]
+  const line = [225, 232, 243] as [number, number, number]
   const pageW = 595
 
-  doc.setFillColor(...tealDark)
+  doc.setFillColor(...navy)
   doc.roundedRect(28, 24, pageW - 56, 118, 14, 14, 'F')
+  doc.setFillColor(...blue)
+  doc.roundedRect(28, 24, 7, 118, 4, 4, 'F')
+  doc.setFillColor(...cyan)
+  doc.circle(535, 37, 4, 'F')
 
   if (company.logoDataUrl) {
     try {
       doc.setFillColor(255, 255, 255)
-      doc.roundedRect(42, 40, 82, 70, 10, 10, 'F')
-      doc.addImage(company.logoDataUrl, 'PNG', 49, 47, 68, 56, undefined, 'FAST')
+      doc.roundedRect(43, 40, 80, 70, 10, 10, 'F')
+      doc.addImage(company.logoDataUrl, 'PNG', 50, 47, 66, 56, undefined, 'FAST')
     } catch { /* ignore invalid logo */ }
   }
 
@@ -49,7 +55,7 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8.5)
   const companyLines = [company.taxId && `RIF/RUC: ${company.taxId}`, company.phone, company.email, company.address, company.city].filter(Boolean)
-  companyLines.slice(0, 4).forEach((line, index) => doc.text(String(line), companyX, 76 + index * 11))
+  companyLines.slice(0, 4).forEach((value, index) => doc.text(String(value), companyX, 76 + index * 11))
 
   doc.setTextColor(255, 255, 255)
   doc.setFont('helvetica', 'bold')
@@ -66,14 +72,14 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
   const badgeWidth = Math.max(72, doc.getTextWidth(badgeText) + 22)
   doc.setFillColor(255, 255, 255)
   doc.roundedRect(548 - badgeWidth, 113, badgeWidth, 20, 10, 10, 'F')
-  doc.setTextColor(...tealDark)
+  doc.setTextColor(...navy)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(7.5)
   doc.text(badgeText, 548 - badgeWidth / 2, 126.5, { align: 'center' })
 
   doc.setFillColor(...soft)
   doc.roundedRect(28, 160, pageW - 56, 92, 12, 12, 'F')
-  doc.setTextColor(...tealDark)
+  doc.setTextColor(...blue)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.text('FACTURADO A', 44, 181)
@@ -84,9 +90,9 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
   doc.setFontSize(8.5)
   doc.setTextColor(...muted)
   const clientLines = [invoice.client.taxId && `RIF/RUC/C.I.: ${invoice.client.taxId}`, invoice.client.phone, invoice.client.email, invoice.client.address].filter(Boolean)
-  clientLines.slice(0, 3).forEach((line, index) => doc.text(String(line), 44, 218 + index * 12))
+  clientLines.slice(0, 3).forEach((value, index) => doc.text(String(value), 44, 218 + index * 12))
 
-  doc.setTextColor(...tealDark)
+  doc.setTextColor(...blue)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.text('RESUMEN', 382, 181)
@@ -101,18 +107,18 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
   autoTable(doc, {
     startY: 274,
     margin: { left: 28, right: 28 },
-    head: [['Cant.', 'Descripción', 'P. unitario', 'Total']],
+    head: [['Cantidad', 'Descripción', 'Precio unitario', 'Total']],
     body: invoice.items.map((item) => [
-      item.quantity.toLocaleString('es'),
+      item.quantity.toLocaleString('es-VE', { maximumFractionDigits: 2 }),
       item.description,
       money(item.unitPrice, invoice.currency),
       money(item.quantity * item.unitPrice, invoice.currency),
     ]),
     theme: 'plain',
-    styles: { font: 'helvetica', fontSize: 9, cellPadding: { top: 10, right: 8, bottom: 10, left: 8 }, textColor: ink, lineColor: [226, 233, 232], lineWidth: { bottom: 0.6 } },
-    headStyles: { fillColor: teal, textColor: [255, 255, 255], fontStyle: 'bold', lineWidth: 0 },
-    alternateRowStyles: { fillColor: [249, 251, 251] },
-    columnStyles: { 0: { cellWidth: 48 }, 1: { cellWidth: 274 }, 2: { cellWidth: 95, halign: 'right' }, 3: { cellWidth: 100, halign: 'right', fontStyle: 'bold' } },
+    styles: { font: 'helvetica', fontSize: 9, cellPadding: { top: 10, right: 8, bottom: 10, left: 8 }, textColor: ink, lineColor: line, lineWidth: { bottom: 0.6 } },
+    headStyles: { fillColor: blue, textColor: [255, 255, 255], fontStyle: 'bold', lineWidth: 0 },
+    alternateRowStyles: { fillColor: [249, 251, 255] },
+    columnStyles: { 0: { cellWidth: 58 }, 1: { cellWidth: 254 }, 2: { cellWidth: 105, halign: 'right' }, 3: { cellWidth: 100, halign: 'right', fontStyle: 'bold' } },
   })
 
   const tableEnd = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
@@ -138,27 +144,73 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
     doc.text(value, summaryX + summaryW - 14, y, { align: 'right' })
     doc.setTextColor(...muted)
   })
-  doc.setDrawColor(210, 223, 221)
+  doc.setDrawColor(...line)
   doc.line(summaryX + 14, summaryY + 76, summaryX + summaryW - 14, summaryY + 76)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(12)
-  doc.setTextColor(...tealDark)
+  doc.setTextColor(...blue)
   doc.text('TOTAL', summaryX + 14, summaryY + 98)
   doc.text(money(total, invoice.currency), summaryX + summaryW - 14, summaryY + 98, { align: 'right' })
 
-  const infoY = Math.max(summaryY + 136, 600)
   if (invoice.notes) {
-    doc.setTextColor(...tealDark)
+    const notesY = summaryY + 16
+    doc.setTextColor(...blue)
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9)
-    doc.text('OBSERVACIONES', 28, infoY)
+    doc.setFontSize(8.5)
+    doc.text('OBSERVACIONES', 28, notesY)
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(...muted)
-    doc.setFontSize(8.5)
-    doc.text(doc.splitTextToSize(invoice.notes, 300), 28, infoY + 16)
+    doc.setFontSize(8.3)
+    doc.text(doc.splitTextToSize(invoice.notes, 280), 28, notesY + 16)
   }
 
-  doc.setDrawColor(225, 232, 231)
+  const mobile = [company.mobilePaymentBank, company.mobilePaymentPhone, company.mobilePaymentId].filter(Boolean)
+  const bank = [company.bankName, company.bankAccountType, company.bankAccountNumber, company.bankAccountHolder].filter(Boolean)
+  const binance = [company.binanceId].filter(Boolean)
+  const hasPaymentData = mobile.length > 0 || bank.length > 0 || binance.length > 0 || Boolean(company.paymentNotes)
+
+  if (hasPaymentData) {
+    const paymentY = Math.max(summaryY + 138, 520)
+    const paymentH = company.paymentNotes ? 118 : 94
+    doc.setFillColor(248, 250, 255)
+    doc.roundedRect(28, paymentY, 539, paymentH, 12, 12, 'F')
+    doc.setFillColor(...navy)
+    doc.roundedRect(28, paymentY, 6, paymentH, 3, 3, 'F')
+    doc.setTextColor(...blue)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text('DATOS PARA PAGAR', 44, paymentY + 20)
+
+    const columns = [
+      { title: 'PAGO MÓVIL', lines: [company.mobilePaymentBank && `Banco: ${company.mobilePaymentBank}`, company.mobilePaymentPhone && `Tel: ${company.mobilePaymentPhone}`, company.mobilePaymentId && `C.I./RIF: ${company.mobilePaymentId}`].filter(Boolean) as string[] },
+      { title: 'CUENTA BANCARIA', lines: [company.bankName && `Banco: ${company.bankName}`, company.bankAccountType, company.bankAccountNumber, company.bankAccountHolder && `Titular: ${company.bankAccountHolder}`].filter(Boolean) as string[] },
+      { title: 'BINANCE / DIGITAL', lines: [company.binanceId && `Pay ID / correo: ${company.binanceId}`].filter(Boolean) as string[] },
+    ]
+    const xPositions = [44, 220, 396]
+    columns.forEach((column, index) => {
+      if (!column.lines.length) return
+      const x = xPositions[index]
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(7.5)
+      doc.setTextColor(...navy)
+      doc.text(column.title, x, paymentY + 40)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7.5)
+      doc.setTextColor(...muted)
+      column.lines.slice(0, 4).forEach((value, lineIndex) => doc.text(doc.splitTextToSize(String(value), 155), x, paymentY + 54 + lineIndex * 11))
+    })
+
+    if (company.paymentNotes) {
+      doc.setDrawColor(...line)
+      doc.line(44, paymentY + 83, 551, paymentY + 83)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7.3)
+      doc.setTextColor(...muted)
+      doc.text(doc.splitTextToSize(company.paymentNotes, 500), 44, paymentY + 98)
+    }
+  }
+
+  doc.setDrawColor(...line)
   doc.line(28, 781, 567, 781)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7.8)
@@ -166,7 +218,7 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
   const footerPrefix = 'Generado con ZiviFactura · Zivi Dynamics C.A. · RIF J-508175123 · '
   doc.text(footerPrefix, 28, 802)
   const linkX = 28 + doc.getTextWidth(footerPrefix)
-  doc.setTextColor(...tealDark)
+  doc.setTextColor(...blue)
   doc.textWithLink('zividynamics.com', linkX, 802, { url: 'https://zividynamics.com' })
   return doc
 }
