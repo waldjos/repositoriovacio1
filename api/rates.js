@@ -1,5 +1,7 @@
 const SOURCE_URL = 'https://www.usdt.com.ve/api/v1/rates/current'
 const BCV_URL = 'https://www.bcv.org.ve/'
+const DOLAR_API_EUR_URL = 'https://ve.dolarapi.com/v1/euros/oficial'
+const DOLAR_API_USD_URL = 'https://ve.dolarapi.com/v1/dolares/oficial'
 
 function parseLocalizedNumber(value) {
   if (value == null) return null
@@ -21,7 +23,7 @@ function parseLocalizedNumber(value) {
 }
 
 function extractBcvRate(html, id) {
-  const block = html.match(new RegExp(`id=["']${id}["'][\\s\\S]{0,1600}?<strong[^>]*>\\s*([^<]+)`, 'i'))
+  const block = html.match(new RegExp(`id=["']${id}["'][\\s\\S]{0,2000}?<strong[^>]*>\\s*([^<]+)`, 'i'))
   return block ? parseLocalizedNumber(block[1]) : null
 }
 
@@ -45,6 +47,21 @@ async function fetchOfficialBcv() {
   }
 }
 
+async function fetchDolarApiRate(url) {
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(7000),
+    })
+    if (!response.ok) return { rate: null, updatedAt: null }
+    const data = await response.json()
+    const rate = parseLocalizedNumber(data?.promedio ?? data?.venta ?? data?.compra)
+    return { rate, updatedAt: data?.fechaActualizacion || null }
+  } catch {
+    return { rate: null, updatedAt: null }
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET')
@@ -52,12 +69,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [marketResponse, official] = await Promise.all([
+    const [marketResponse, official, fallbackEur, fallbackUsd] = await Promise.all([
       fetch(SOURCE_URL, {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(9000),
       }),
       fetchOfficialBcv(),
+      fetchDolarApiRate(DOLAR_API_EUR_URL),
+      fetchDolarApiRate(DOLAR_API_USD_URL),
     ])
 
     if (!marketResponse.ok) throw new Error(`Fuente de tasas respondió ${marketResponse.status}`)
@@ -68,11 +87,16 @@ export default async function handler(req, res) {
     const binanceSell = parseLocalizedNumber(data?.binance?.sell_rate)
     const bybitBuy = parseLocalizedNumber(data?.bybit?.buy_rate)
     const bybitSell = parseLocalizedNumber(data?.bybit?.sell_rate)
-    const usdBcv = official.usd || parseLocalizedNumber(data?.bcv?.rate)
-    const eurBcv = official.eur
+
+    // Preferimos el BCV directo. Si el sitio oficial bloquea la consulta del servidor,
+    // usamos proveedores que replican expresamente la cotización oficial BCV.
+    const usdBcv = official.usd || parseLocalizedNumber(data?.bcv?.rate) || fallbackUsd.rate
+    const eurBcv = official.eur || fallbackEur.rate
     const p2pValues = [binanceBuy, bybitBuy].filter(value => Number.isFinite(value))
     const usdtAverage = p2pValues.length ? p2pValues.reduce((sum, value) => sum + value, 0) / p2pValues.length : null
     const brechaPct = usdBcv && usdtAverage ? ((usdtAverage - usdBcv) / usdBcv) * 100 : parseLocalizedNumber(data?.brecha_pct)
+
+    const officialFallbackUsed = (!official.eur && Boolean(fallbackEur.rate)) || (!official.usd && !parseLocalizedNumber(data?.bcv?.rate) && Boolean(fallbackUsd.rate))
 
     res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=1800')
     return res.status(200).json({
@@ -87,12 +111,12 @@ export default async function handler(req, res) {
         usdtAverage,
         brechaPct,
         capturedAt: new Date().toISOString(),
-        sourceCapturedAt: data?.captured_at || null,
+        sourceCapturedAt: data?.captured_at || fallbackEur.updatedAt || fallbackUsd.updatedAt || null,
       },
       meta: {
         marketSource: 'usdt.com.ve',
-        officialSource: 'Banco Central de Venezuela',
-        attribution: 'https://www.usdt.com.ve',
+        officialSource: officialFallbackUsed ? 'BCV · respaldo DolarApi' : 'Banco Central de Venezuela',
+        attribution: officialFallbackUsed ? 'BCV / DolarApi.com / usdt.com.ve' : 'BCV / usdt.com.ve',
       },
     })
   } catch (error) {
