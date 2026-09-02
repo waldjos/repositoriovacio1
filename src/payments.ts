@@ -1,5 +1,6 @@
 import { db } from './db'
 import { totals } from './pdf'
+import { getRateValue } from './rates'
 import type { Invoice, Payment, PaymentMethodKey, RateSnapshot } from './types'
 
 export const paymentMethodLabels: Record<PaymentMethodKey, string> = {
@@ -34,6 +35,20 @@ export function suggestedPaymentRate(invoice: Invoice, rates?: RateSnapshot | nu
   return Number(invoice.rateValue) || currentRateForCurrency(invoice.currency, rates)
 }
 
+// Cuentas por cobrar se valorizan con la referencia ACTUAL, sin alterar la factura histórica.
+// Si el documento definió una referencia (BCV, Binance, promedio), se respeta esa referencia
+// pero con su cotización vigente. Las tasas personalizadas permanecen fijas.
+export function currentReceivableRate(invoice: Invoice, rates?: RateSnapshot | null) {
+  if (invoice.currency.toUpperCase() === 'VES') return 1
+  const source = invoice.rateSource
+  if (source === 'custom') return Number(invoice.rateValue) || 0
+  if (source && source !== 'none') {
+    const live = getRateValue(source, rates)
+    if (live) return live
+  }
+  return currentRateForCurrency(invoice.currency, rates)
+}
+
 export function paymentAmountVes(amountApplied: number, invoiceCurrency: string, rateValue: number) {
   const amount = Math.max(0, Number(amountApplied) || 0)
   return invoiceCurrency.toUpperCase() === 'VES' ? amount : amount * Math.max(0, Number(rateValue) || 0)
@@ -45,6 +60,13 @@ export function appliedForInvoice(invoiceNumber: string, payments: Payment[]) {
 
 export function balanceForInvoice(invoice: Invoice, payments: Payment[]) {
   return Math.max(0, totals(invoice).total - appliedForInvoice(invoice.number, payments))
+}
+
+export function receivableBalanceVes(invoice: Invoice, payments: Payment[], rates?: RateSnapshot | null) {
+  const balance = balanceForInvoice(invoice, payments)
+  const rate = currentReceivableRate(invoice, rates)
+  if (!balance || !rate) return 0
+  return balance * rate
 }
 
 export async function reconcileInvoiceStatus(invoice: Invoice) {
