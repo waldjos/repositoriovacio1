@@ -109,6 +109,7 @@ export interface Payment {
   amountVes: number
   rateCapturedAt?: string
   rateSnapshot?: RateSnapshot
+  proofSubmissionId?: string
   createdAt: string
   updatedAt: string
 }
