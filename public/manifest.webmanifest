@@ -1,15 +1,16 @@
 {
   "name": "ZiviFactura",
   "short_name": "ZiviFactura",
-  "description": "Crea, guarda y comparte facturas desde tu dispositivo.",
+  "description": "Crea, guarda, sincroniza y comparte facturas con ZiviFactura.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f7faf9",
-  "theme_color": "#0f766e",
+  "background_color": "#081226",
+  "theme_color": "#081226",
   "lang": "es",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "/zivifactura-icon-v2.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
