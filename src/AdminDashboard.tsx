@@ -3,49 +3,32 @@ import { BarChart3, Calculator, CircleDollarSign, RefreshCw, WalletCards } from 
 import { db } from './db'
 import { money, totals } from './pdf'
 import { fetchLiveRates, getCachedRates, pivotConversions, refreshRatesIfDue } from './rates'
-import type { Invoice, RateSnapshot } from './types'
+import { appliedForInvoice, balanceForInvoice, legacyPaymentMethod, paymentMethodLabels, currentRateForCurrency } from './payments'
+import type { Invoice, Payment, PaymentMethodKey, RateSnapshot } from './types'
 import './admin.css'
 
 type AdminView = 'income' | 'stats'
 type Period = 'month' | '30d' | 'year' | 'all'
 
-type PaymentKey = 'mobile' | 'transfer' | 'binance' | 'cash' | 'zelle' | 'card' | 'other' | 'unspecified'
-
-const PAYMENT_LABELS: Record<PaymentKey, string> = {
-  mobile: 'Pago móvil',
-  transfer: 'Transferencia',
-  binance: 'Binance / USDT',
-  cash: 'Efectivo',
-  zelle: 'Zelle',
-  card: 'Tarjeta / POS',
-  other: 'Otro',
-  unspecified: 'No especificado',
+type CashMovement = {
+  key: string
+  invoiceNumber: string
+  date: string
+  method: PaymentMethodKey
+  amount: number
+  currency: string
+  ves: number
+  legacy?: boolean
 }
 
-function normalizeText(value = '') {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+function recordDate(raw: string) {
+  const parsed = new Date(`${raw}T12:00:00`)
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed
 }
 
-function paymentCategory(invoice: Invoice): PaymentKey {
-  const value = normalizeText(invoice.paymentMethod || '')
-  if (!value) return 'unspecified'
-  if (value.includes('pago movil') || value.includes('pago-movil') || value.includes('pagomovil')) return 'mobile'
-  if (value.includes('transfer')) return 'transfer'
-  if (value.includes('binance') || value.includes('usdt') || value.includes('crypto')) return 'binance'
-  if (value.includes('efectivo') || value.includes('cash')) return 'cash'
-  if (value.includes('zelle')) return 'zelle'
-  if (value.includes('tarjeta') || value.includes('pos') || value.includes('debito') || value.includes('credito')) return 'card'
-  return 'other'
-}
-
-function invoiceDate(invoice: Invoice) {
-  const parsed = new Date(`${invoice.date || invoice.updatedAt.slice(0, 10)}T12:00:00`)
-  return Number.isNaN(parsed.getTime()) ? new Date(invoice.updatedAt) : parsed
-}
-
-function inPeriod(invoice: Invoice, period: Period) {
+function inPeriod(dateRaw: string, period: Period) {
   if (period === 'all') return true
-  const date = invoiceDate(invoice)
+  const date = recordDate(dateRaw)
   const now = new Date()
   if (period === 'month') return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()
   if (period === 'year') return date.getFullYear() === now.getFullYear()
@@ -54,29 +37,11 @@ function inPeriod(invoice: Invoice, period: Period) {
   return date >= limit
 }
 
-function currentRateForCurrency(currency: string, rates: RateSnapshot | null) {
-  if (!rates) return 0
-  const code = currency.toUpperCase()
-  if (code === 'USD') return Number(rates.usdBcv) || 0
-  if (code === 'EUR') return Number(rates.eurBcv) || 0
-  if (code === 'USDT') return Number(rates.binanceBuy || rates.usdtAverage) || 0
-  return 0
-}
-
 function invoiceVes(invoice: Invoice, rates: RateSnapshot | null) {
   const total = totals(invoice).total
-  const currency = invoice.currency.toUpperCase()
-  if (currency === 'VES') return { value: total, approximate: false }
-  const frozen = Number(invoice.rateValue) || 0
-  if (frozen) return { value: total * frozen, approximate: false }
-  const current = currentRateForCurrency(currency, rates)
-  if (current) return { value: total * current, approximate: true }
-  return { value: undefined, approximate: false }
-}
-
-function formatNumber(value?: number, suffix = '') {
-  if (!Number.isFinite(value)) return 'No disponible'
-  return `${Number(value).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${suffix}`
+  if (invoice.currency.toUpperCase() === 'VES') return total
+  const rate = Number(invoice.rateValue) || currentRateForCurrency(invoice.currency, rates)
+  return rate ? total * rate : 0
 }
 
 function monthKey(date: Date) {
@@ -87,8 +52,14 @@ function monthLabel(date: Date) {
   return date.toLocaleDateString('es-VE', { month: 'short', year: '2-digit' }).replace('.', '')
 }
 
+function formatNumber(value?: number, suffix = '') {
+  if (!Number.isFinite(value)) return 'No disponible'
+  return `${Number(value).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${suffix}`
+}
+
 export default function AdminDashboard({ view }: { view: AdminView }) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [payments, setPayments] = useState<Payment[]>([])
   const [rates, setRates] = useState<RateSnapshot | null>(getCachedRates())
   const [period, setPeriod] = useState<Period>('month')
   const [loading, setLoading] = useState(false)
@@ -96,11 +67,13 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
   async function load(forceRates = false) {
     setLoading(true)
     try {
-      const [rows, nextRates] = await Promise.all([
+      const [invoiceRows, paymentRows, nextRates] = await Promise.all([
         db.invoices.orderBy('updatedAt').reverse().toArray(),
+        db.payments.orderBy('date').reverse().toArray(),
         forceRates ? fetchLiveRates(true).catch(() => getCachedRates()) : refreshRatesIfDue(),
       ])
-      setInvoices(rows)
+      setInvoices(invoiceRows)
+      setPayments(paymentRows)
       if (nextRates) setRates(nextRates)
     } finally {
       setLoading(false)
@@ -109,39 +82,57 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
 
   useEffect(() => { void load(false) }, [])
 
-  const paid = useMemo(() => invoices.filter(invoice => invoice.status === 'paid' && inPeriod(invoice, period)), [invoices, period])
+  const allMovements = useMemo<CashMovement[]>(() => {
+    const actual: CashMovement[] = payments.map(payment => ({
+      key: payment.key,
+      invoiceNumber: payment.invoiceNumber,
+      date: payment.date,
+      method: payment.method,
+      amount: payment.amountApplied,
+      currency: payment.invoiceCurrency,
+      ves: Number(payment.amountVes) || 0,
+    }))
+    const invoicesWithLedger = new Set(payments.map(payment => payment.invoiceNumber))
+    const legacy: CashMovement[] = invoices
+      .filter(invoice => invoice.status === 'paid' && !invoicesWithLedger.has(invoice.number))
+      .map(invoice => ({
+        key: `legacy-${invoice.number}`,
+        invoiceNumber: invoice.number,
+        date: invoice.date,
+        method: legacyPaymentMethod(invoice),
+        amount: totals(invoice).total,
+        currency: invoice.currency,
+        ves: invoiceVes(invoice, rates),
+        legacy: true,
+      }))
+    return [...actual, ...legacy]
+  }, [invoices, payments, rates])
+
+  const movements = useMemo(() => allMovements.filter(movement => inPeriod(movement.date, period)), [allMovements, period])
 
   const summary = useMemo(() => {
-    let totalVes = 0
-    let approximate = 0
-    let missing = 0
+    const totalVes = movements.reduce((sum, movement) => sum + movement.ves, 0)
     const original = new Map<string, number>()
-    const paymentMap = new Map<PaymentKey, { count: number; ves: number }>()
-
-    paid.forEach(invoice => {
-      const total = totals(invoice).total
-      original.set(invoice.currency, (original.get(invoice.currency) || 0) + total)
-      const converted = invoiceVes(invoice, rates)
-      if (converted.value != null) {
-        totalVes += converted.value
-        if (converted.approximate) approximate += 1
-      } else {
-        missing += 1
-      }
-      const key = paymentCategory(invoice)
-      const current = paymentMap.get(key) || { count: 0, ves: 0 }
+    const methodMap = new Map<PaymentMethodKey, { count: number; ves: number }>()
+    movements.forEach(movement => {
+      original.set(movement.currency, (original.get(movement.currency) || 0) + movement.amount)
+      const current = methodMap.get(movement.method) || { count: 0, ves: 0 }
       current.count += 1
-      if (converted.value != null) current.ves += converted.value
-      paymentMap.set(key, current)
+      current.ves += movement.ves
+      methodMap.set(movement.method, current)
     })
-
-    const equivalents = pivotConversions(totalVes, rates)
-    const payments = (Object.keys(PAYMENT_LABELS) as PaymentKey[])
-      .map(key => ({ key, label: PAYMENT_LABELS[key], ...(paymentMap.get(key) || { count: 0, ves: 0 }) }))
+    const paymentsByMethod = (Object.keys(paymentMethodLabels) as PaymentMethodKey[])
+      .map(key => ({ key, label: paymentMethodLabels[key], ...(methodMap.get(key) || { count: 0, ves: 0 }) }))
       .filter(item => item.count > 0)
       .sort((a, b) => b.count - a.count)
-    return { totalVes, approximate, missing, original, equivalents, payments }
-  }, [paid, rates])
+    return {
+      totalVes,
+      original,
+      paymentsByMethod,
+      equivalents: pivotConversions(totalVes, rates),
+      legacyCount: movements.filter(movement => movement.legacy).length,
+    }
+  }, [movements, rates])
 
   const trend = useMemo(() => {
     const now = new Date()
@@ -150,22 +141,34 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
       return { key: monthKey(d), label: monthLabel(d), value: 0 }
     })
     const map = new Map(months.map(item => [item.key, item]))
-    invoices.filter(invoice => invoice.status === 'paid').forEach(invoice => {
-      const slot = map.get(monthKey(invoiceDate(invoice)))
-      const converted = invoiceVes(invoice, rates)
-      if (slot && converted.value != null) slot.value += converted.value
+    allMovements.forEach(movement => {
+      const slot = map.get(monthKey(recordDate(movement.date)))
+      if (slot) slot.value += movement.ves
     })
     return months
-  }, [invoices, rates])
+  }, [allMovements])
+
+  const partialCount = useMemo(() => invoices.filter(invoice => {
+    const applied = appliedForInvoice(invoice.number, payments)
+    return applied > 0 && balanceForInvoice(invoice, payments) > 0.005
+  }).length, [invoices, payments])
+
+  const outstandingVes = useMemo(() => invoices.filter(invoice => invoice.status === 'issued').reduce((sum, invoice) => {
+    const balance = balanceForInvoice(invoice, payments)
+    if (!balance) return sum
+    if (invoice.currency.toUpperCase() === 'VES') return sum + balance
+    const rate = Number(invoice.rateValue) || currentRateForCurrency(invoice.currency, rates)
+    return sum + (rate ? balance * rate : 0)
+  }, 0), [invoices, payments, rates])
 
   const maxTrend = Math.max(...trend.map(item => item.value), 1)
   const originalTotals = [...summary.original.entries()].map(([currency, value]) => money(value, currency)).join(' · ') || '0,00'
-  const average = paid.length ? summary.totalVes / paid.length : 0
+  const average = movements.length ? summary.totalVes / movements.length : 0
   const updated = rates?.capturedAt ? new Date(rates.capturedAt).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' }) : 'Sin tasa disponible'
 
   return <main className="adminPage">
     <section className="adminHero">
-      <div><span>ZIVIFACTURA · ADMINISTRACIÓN</span><h1>{view === 'income' ? 'Ingresos y equivalentes' : 'Estadísticas de cobro'}</h1><p>{view === 'income' ? 'Convierte tus facturas pagadas a bolívares y compáralas con las tasas actuales de USD, EUR y USDT.' : 'Mide cuántos cobros recibiste por cada medio de pago y cuánto representaron en bolívares.'}</p></div>
+      <div><span>ZIVIFACTURA · ADMINISTRACIÓN</span><h1>{view === 'income' ? 'Ingresos y equivalentes' : 'Estadísticas de cobro'}</h1><p>{view === 'income' ? 'Los ingresos se calculan desde cada cobro o abono registrado, usando la fecha y la tasa real de ese movimiento.' : 'Analiza cuántos pagos recibiste por cada método y cuánto representaron en bolívares.'}</p></div>
       <button className="secondary" disabled={loading} onClick={() => void load(true)}><RefreshCw size={17} className={loading ? 'spin' : ''}/>{loading ? 'Actualizando…' : 'Actualizar datos'}</button>
     </section>
 
@@ -181,7 +184,7 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
 
     {view === 'income' ? <>
       <section className="incomePrimary">
-        <article className="incomeMainCard"><div className="adminIcon"><CircleDollarSign/></div><span>INGRESOS PAGADOS · BASE BS</span><strong>{money(summary.totalVes, 'VES')}</strong><small>{paid.length} factura{paid.length === 1 ? '' : 's'} pagada{paid.length === 1 ? '' : 's'} · Original: {originalTotals}</small></article>
+        <article className="incomeMainCard"><div className="adminIcon"><CircleDollarSign/></div><span>INGRESOS REGISTRADOS · BASE BS</span><strong>{money(summary.totalVes, 'VES')}</strong><small>{movements.length} movimiento{movements.length === 1 ? '' : 's'} de caja · Original: {originalTotals}</small></article>
         <div className="incomeEquivalents">
           <article><span>USD · BCV</span><strong>{summary.equivalents.USD != null ? money(summary.equivalents.USD, 'USD') : 'N/D'}</strong></article>
           <article><span>EUR · BCV</span><strong>{summary.equivalents.EUR != null ? money(summary.equivalents.EUR, 'EUR') : 'N/D'}</strong></article>
@@ -190,22 +193,28 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
         </div>
       </section>
 
+      <section className="statsMetrics adminIncomeMetrics">
+        <article><WalletCards/><span>Movimientos del período</span><strong>{movements.length}</strong></article>
+        <article><CircleDollarSign/><span>Por cobrar aprox.</span><strong>{money(outstandingVes, 'VES')}</strong></article>
+        <article><Calculator/><span>Facturas parciales</span><strong>{partialCount}</strong></article>
+      </section>
+
       <section className="adminGrid">
-        <article className="card adminCard"><div className="adminCardHead"><div><span>CONTROL DE INGRESOS</span><h2>Calidad del cálculo</h2></div><Calculator size={22}/></div><div className="adminRows"><div><span>Facturas pagadas</span><strong>{paid.length}</strong></div><div><span>Ticket promedio</span><strong>{money(average, 'VES')}</strong></div><div><span>Usaron tasa actual como aproximación</span><strong>{summary.approximate}</strong></div><div><span>Sin conversión posible</span><strong>{summary.missing}</strong></div></div><p className="adminNote">Si una factura conserva su tasa de cobro, ZiviFactura usa esa tasa histórica. Si no la tiene, usa la tasa actual solo como aproximación.</p></article>
-        <article className="card adminCard"><div className="adminCardHead"><div><span>ÚLTIMOS 6 MESES</span><h2>Tendencia en bolívares</h2></div><BarChart3 size={22}/></div><div className="trendList">{trend.map(item => <div className="trendRow" key={item.key}><span>{item.label}</span><div><i style={{ width: `${Math.max(item.value ? 4 : 0, (item.value / maxTrend) * 100)}%` }}/></div><strong>{money(item.value, 'VES')}</strong></div>)}</div></article>
+        <article className="card adminCard"><div className="adminCardHead"><div><span>CONTROL DE CAJA</span><h2>Calidad del registro</h2></div><Calculator size={22}/></div><div className="adminRows"><div><span>Ticket promedio por movimiento</span><strong>{money(average, 'VES')}</strong></div><div><span>Movimientos históricos heredados</span><strong>{summary.legacyCount}</strong></div><div><span>Facturas con saldo parcial</span><strong>{partialCount}</strong></div><div><span>Saldo por cobrar aproximado</span><strong>{money(outstandingVes, 'VES')}</strong></div></div><p className="adminNote">Las facturas antiguas marcadas como pagadas y sin movimientos de caja se conservan como registros históricos. Los nuevos reportes usan los cobros y abonos reales.</p></article>
+        <article className="card adminCard"><div className="adminCardHead"><div><span>ÚLTIMOS 6 MESES</span><h2>Tendencia de ingresos</h2></div><BarChart3 size={22}/></div><div className="trendList">{trend.map(item => <div className="trendRow" key={item.key}><span>{item.label}</span><div><i style={{ width: `${Math.max(item.value ? 4 : 0, (item.value / maxTrend) * 100)}%` }}/></div><strong>{money(item.value, 'VES')}</strong></div>)}</div></article>
       </section>
     </> : <>
       <section className="statsMetrics">
-        <article><WalletCards/><span>Cobros registrados</span><strong>{paid.length}</strong></article>
+        <article><WalletCards/><span>Cobros y abonos</span><strong>{movements.length}</strong></article>
         <article><CircleDollarSign/><span>Total equivalente</span><strong>{money(summary.totalVes, 'VES')}</strong></article>
         <article><Calculator/><span>Ticket promedio</span><strong>{money(average, 'VES')}</strong></article>
       </section>
 
-      <section className="card paymentStats"><div className="adminCardHead"><div><span>MÉTODOS DE PAGO</span><h2>Cómo estás recibiendo tus ingresos</h2><p>Se clasifica el texto de “Forma de pago” de cada factura pagada.</p></div><BarChart3 size={24}/></div>{summary.payments.length ? <div className="paymentStatGrid">{summary.payments.map(item => <article key={item.key}><div><span>{item.label}</span><strong>{item.count}</strong></div><small>{item.count === 1 ? '1 operación' : `${item.count} operaciones`}</small><b>{money(item.ves, 'VES')}</b></article>)}</div> : <div className="adminEmpty">Todavía no hay cobros pagados en este período.</div>}</section>
+      <section className="card paymentStats"><div className="adminCardHead"><div><span>MÉTODOS DE PAGO</span><h2>Cómo estás recibiendo tus ingresos</h2><p>Cada abono cuenta como una operación independiente, incluso cuando pertenece a la misma factura.</p></div><BarChart3 size={24}/></div>{summary.paymentsByMethod.length ? <div className="paymentStatGrid">{summary.paymentsByMethod.map(item => <article key={item.key}><div><span>{item.label}</span><strong>{item.count}</strong></div><small>{item.count === 1 ? '1 operación' : `${item.count} operaciones`}</small><b>{money(item.ves, 'VES')}</b></article>)}</div> : <div className="adminEmpty">Todavía no hay movimientos de caja en este período.</div>}</section>
 
-      <section className="card adminCard"><div className="adminCardHead"><div><span>DISTRIBUCIÓN</span><h2>Participación por número de operaciones</h2></div></div><div className="distributionList">{summary.payments.map(item => { const pct = paid.length ? (item.count / paid.length) * 100 : 0; return <div key={item.key}><span>{item.label}</span><div><i style={{ width: `${pct}%` }}/></div><strong>{pct.toFixed(1)}%</strong></div>})}</div><p className="adminNote">Para que estas estadísticas sean consistentes, escribe la forma de pago de manera clara: Pago móvil, Transferencia, Binance/USDT, Efectivo, Zelle o Tarjeta/POS. Los demás textos se agrupan como “Otro”.</p></section>
+      <section className="card adminCard"><div className="adminCardHead"><div><span>DISTRIBUCIÓN</span><h2>Participación por número de operaciones</h2></div></div><div className="distributionList">{summary.paymentsByMethod.map(item => { const pct = movements.length ? (item.count / movements.length) * 100 : 0; return <div key={item.key}><span>{item.label}</span><div><i style={{ width: `${pct}%` }}/></div><strong>{pct.toFixed(1)}%</strong></div>})}</div><p className="adminNote">Pago móvil, transferencia, Binance/USDT, efectivo, Zelle y tarjeta/POS quedan normalizados desde el momento de registrar el cobro.</p></section>
     </>}
 
-    <p className="adminFootnote">Los reportes se basan en facturas marcadas como pagadas y en la fecha del documento. No sustituyen una conciliación bancaria o contable formal.</p>
+    <p className="adminFootnote">Los reportes administrativos se construyen con el libro de caja de ZiviFactura. No sustituyen una conciliación bancaria o contable formal.</p>
   </main>
 }
