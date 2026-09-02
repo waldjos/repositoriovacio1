@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="theme-color" content="#0b1633"/>
+  <title>Copiar datos de pago | ZiviFactura</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f7fd;color:#17243d}
+    .top{background:linear-gradient(135deg,#0b1633,#1d4ed8 68%,#06b6d4);color:#fff;padding:28px 18px 72px}.top>div,.wrap{width:min(100%,720px);margin:auto}.brand{display:flex;align-items:center;gap:10px;font-weight:850}.mark{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.13);font-size:20px}.top h1{font-size:clamp(2rem,9vw,3.2rem);line-height:1;margin:30px 0 10px;letter-spacing:-.05em}.top p{margin:0;color:#d7e8ff;line-height:1.5}
+    .wrap{margin-top:-44px;padding:0 14px 42px}.card{background:#fff;border:1px solid #e0e8f3;border-radius:20px;box-shadow:0 18px 50px rgba(31,52,90,.11);padding:20px;margin-bottom:14px}.summary{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start}.eyebrow{display:block;font-size:.7rem;font-weight:850;letter-spacing:.12em;color:#2563eb}.summary h2{margin:5px 0 4px;font-size:1.25rem}.summary small{color:#738096}.total{text-align:right}.total span{display:block;color:#758198;font-size:.72rem}.total strong{display:block;font-size:1.25rem;margin-top:4px;color:#0f1f39}
+    .sectionTitle{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.sectionTitle h3{margin:0;font-size:1rem}.sectionTitle small{color:#7a879a}.rows{display:grid;gap:8px}.row{border:1px solid #e5ebf4;background:#f9fbfe;border-radius:13px;padding:11px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}.row span{font-size:.72rem;color:#758399;display:block;margin-bottom:3px}.row strong{font-size:.93rem;overflow-wrap:anywhere}.copy{border:0;background:#eaf2ff;color:#1d4ed8;border-radius:10px;min-height:38px;padding:0 12px;font-weight:800}.copy.done{background:#dcfce7;color:#166534}
+    .group{margin-top:16px}.group:first-child{margin-top:0}.group h4{margin:0 0 8px;font-size:.8rem;color:#41506a;text-transform:uppercase;letter-spacing:.07em}.all{width:100%;min-height:50px;border:0;border-radius:14px;background:linear-gradient(135deg,#2563eb,#0ea5e9);color:#fff;font-weight:850;font-size:.95rem}.notice{border:1px solid #cfe2ff;background:#eff6ff;color:#355172;border-radius:14px;padding:13px 14px;font-size:.78rem;line-height:1.5}.error{display:none;border:1px solid #fecaca;background:#fff1f2;color:#9f1239;border-radius:16px;padding:18px}.footer{text-align:center;color:#8490a3;font-size:.72rem;padding-top:7px}.footer a{color:#2563eb;text-decoration:none}
+    @media(max-width:560px){.top{padding-top:20px}.summary{grid-template-columns:1fr}.total{text-align:left}.row{grid-template-columns:1fr auto}.card{padding:16px}.wrap{padding-left:10px;padding-right:10px}}
+  </style>
+</head>
+<body>
+  <header class="top"><div><div class="brand"><span class="mark">Z</span><span>ZiviFactura</span></div><h1>Datos listos para copiar.</h1><p>Esta vista fue incluida dentro de la factura para que puedas copiar montos y datos de pago sin escribirlos manualmente.</p></div></header>
+  <main class="wrap">
+    <div id="error" class="error">No pudimos leer los datos de esta factura. Abre nuevamente el botón desde el PDF original.</div>
+    <section id="content" hidden>
+      <article class="card summary"><div><span class="eyebrow">FACTURA COMPARTIDA</span><h2 id="invoice"></h2><small id="meta"></small></div><div class="total"><span>Total del documento</span><strong id="total"></strong></div></article>
+      <article id="rateCard" class="card" hidden><div class="sectionTitle"><h3>Monto, tasa y equivalentes</h3><small>Toca para copiar</small></div><div id="rateRows" class="rows"></div></article>
+      <article id="paymentCard" class="card" hidden><div class="sectionTitle"><h3>Datos para pagar</h3><small>Toca para copiar</small></div><div id="paymentGroups"></div></article>
+      <article class="card"><button id="copyAll" class="all" type="button">Copiar todos los datos</button></article>
+      <div class="notice"><strong>¿Cómo funciona?</strong> Toca cualquier botón <b>Copiar</b> y luego pega el dato en tu banco, Binance, WhatsApp u otra aplicación. Por seguridad, la información viene dentro del enlace del PDF y no se envía como parámetro al servidor.</div>
+      <p class="footer">Generado con ZiviFactura · <a href="https://zividynamics.com" target="_blank" rel="noreferrer">Zivi Dynamics C.A.</a></p>
+    </section>
+  </main>
+<script>
+  const $ = (id) => document.getElementById(id)
+  function decodePayload() {
+    let raw = location.hash.slice(1).replace(/-/g, '+').replace(/_/g, '/')
+    while (raw.length % 4) raw += '='
+    const binary = atob(raw)
+    const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0))
+    return JSON.parse(new TextDecoder().decode(bytes))
+  }
+  async function copyText(text, button) {
+    try { await navigator.clipboard.writeText(text) }
+    catch {
+      const area = document.createElement('textarea'); area.value = text; area.style.position = 'fixed'; area.style.opacity = '0'; document.body.appendChild(area); area.select(); document.execCommand('copy'); area.remove()
+    }
+    if (button) { const previous = button.textContent; button.textContent = 'Copiado'; button.classList.add('done'); setTimeout(() => { button.textContent = previous; button.classList.remove('done') }, 1500) }
+  }
+  function row(label, value) {
+    const item = document.createElement('div'); item.className = 'row'
+    const text = document.createElement('div'); const labelEl = document.createElement('span'); labelEl.textContent = label; const valueEl = document.createElement('strong'); valueEl.textContent = value; text.append(labelEl, valueEl)
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'copy'; button.textContent = 'Copiar'; button.addEventListener('click', () => copyText(value, button)); item.append(text, button); return item
+  }
+  try {
+    const data = decodePayload(); if (!data || data.version !== 1) throw new Error('invalid')
+    $('invoice').textContent = data.invoice || 'Factura'; $('meta').textContent = [data.company, data.client].filter(Boolean).join(' · '); $('total').textContent = data.total || ''
+    const allLines = [data.company, data.invoice, data.client ? `Cliente: ${data.client}` : '', data.total ? `Total: ${data.total}` : ''].filter(Boolean)
+    if (data.rate || (data.equivalents && data.equivalents.length)) {
+      $('rateCard').hidden = false
+      if (data.rate) { $('rateRows').appendChild(row(data.rate.label || 'Tasa aplicada', data.rate.value || '')); allLines.push(`${data.rate.label || 'Tasa aplicada'}: ${data.rate.value || ''}`) }
+      ;(data.equivalents || []).forEach(item => { $('rateRows').appendChild(row(item.label, item.value)); allLines.push(`${item.label}: ${item.value}`) })
+    }
+    if (data.groups && data.groups.length) {
+      $('paymentCard').hidden = false
+      data.groups.forEach(group => {
+        const section = document.createElement('section'); section.className = 'group'; const title = document.createElement('h4'); title.textContent = group.title; const rows = document.createElement('div'); rows.className = 'rows'; allLines.push('', group.title.toUpperCase())
+        ;(group.rows || []).forEach(item => { rows.appendChild(row(item.label, item.value)); allLines.push(`${item.label}: ${item.value}`) }); section.append(title, rows); $('paymentGroups').appendChild(section)
+      })
+    }
+    $('copyAll').addEventListener('click', event => copyText(allLines.join('\n'), event.currentTarget)); $('content').hidden = false
+  } catch { $('error').style.display = 'block' }
+</script>
+</body>
+</html>
