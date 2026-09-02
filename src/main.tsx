@@ -4,6 +4,7 @@ import AuthShell from './AuthShell'
 import { initAutomaticBackup } from './cloudBackup'
 import './styles.css'
 import './payments.css'
+import './proofs.css'
 
 initAutomaticBackup()
 
