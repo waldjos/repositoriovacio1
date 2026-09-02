@@ -307,29 +307,24 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
     groups: copyGroups,
   }) : ''
 
-  if (hasPaymentData && nextBlockY < 680) {
-    const paymentY = nextBlockY
-    const paymentH = (showNotes ? (columns.length ? 118 : 82) : 94) + 18
+  if (hasPaymentData) {
+    const basePaymentH = showNotes ? (columns.length ? 118 : 82) : 94
+    const ctaH = 86
+    const paymentH = basePaymentH + ctaH
+    let paymentY = nextBlockY
+    if (paymentY + paymentH > 760) {
+      doc.addPage()
+      paymentY = 42
+    }
+
     doc.setFillColor(248, 250, 255)
-    doc.roundedRect(28, paymentY, 539, paymentH, 12, 12, 'F')
+    doc.roundedRect(28, paymentY, 539, paymentH, 14, 14, 'F')
     doc.setFillColor(...navy)
     doc.roundedRect(28, paymentY, 6, paymentH, 3, 3, 'F')
     doc.setTextColor(...blue)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.text('DATOS PARA PAGAR', 44, paymentY + 20)
-
-    const copyButtonX = 430
-    const copyButtonY = paymentY + 8
-    const copyButtonW = 121
-    const copyButtonH = 22
-    doc.setFillColor(...blue)
-    doc.roundedRect(copyButtonX, copyButtonY, copyButtonW, copyButtonH, 7, 7, 'F')
-    doc.setTextColor(255, 255, 255)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(7.2)
-    doc.text('ABRIR Y COPIAR DATOS', copyButtonX + copyButtonW / 2, copyButtonY + 14.5, { align: 'center' })
-    doc.link(copyButtonX, copyButtonY, copyButtonW, copyButtonH, { url: copyUrl })
 
     if (columns.length) {
       const contentWidth = 507
@@ -346,10 +341,41 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
       if (columns.length) { doc.setDrawColor(...line); doc.line(44, noteY, 551, noteY) }
       doc.setFont('helvetica', 'normal'); doc.setFontSize(7.3); doc.setTextColor(...muted); doc.text(doc.splitTextToSize(company.paymentNotes, 500), 44, noteY + 15)
     }
+
+    const ctaY = paymentY + basePaymentH + 2
+    doc.setFillColor(234, 243, 255)
+    doc.roundedRect(44, ctaY, 507, 70, 12, 12, 'F')
+    doc.setFillColor(...blue)
+    doc.circle(66, ctaY + 21, 11, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.text('✓', 66, ctaY + 24.5, { align: 'center' })
+
+    doc.setTextColor(...navy)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9.2)
+    doc.text('COPIA LOS DATOS Y PAGA SIN ERRORES', 84, ctaY + 18)
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(6.8)
     doc.setTextColor(...muted)
-    doc.text("Puedes seleccionar el texto del PDF o tocar 'Abrir y copiar datos' para copiar cada dato con un boton.", 44, paymentY + paymentH - 8)
+    doc.setFontSize(7.2)
+    const helper = 'Abre una vista segura para copiar monto, teléfono, C.I./RIF, cuenta o Binance con un toque.'
+    doc.text(doc.splitTextToSize(helper, 270), 84, ctaY + 32)
+
+    const copyButtonX = 372
+    const copyButtonY = ctaY + 14
+    const copyButtonW = 163
+    const copyButtonH = 42
+    doc.setFillColor(...blue)
+    doc.roundedRect(copyButtonX, copyButtonY, copyButtonW, copyButtonH, 10, 10, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.text('ABRIR Y COPIAR DATOS', copyButtonX + copyButtonW / 2, copyButtonY + 18, { align: 'center' })
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6.6)
+    doc.text('Toca aquí desde tu teléfono', copyButtonX + copyButtonW / 2, copyButtonY + 31, { align: 'center' })
+    doc.link(copyButtonX, copyButtonY, copyButtonW, copyButtonH, { url: copyUrl })
   }
 
   doc.setDrawColor(...line)
