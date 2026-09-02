@@ -7,7 +7,7 @@ import type { BackupData, Client, Company, Invoice, InvoiceItem, InvoiceStatus }
 type Mode = 'home' | 'editor' | 'settings'
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> }
 
-const labels: Record<InvoiceStatus, string> = { draft: 'Borrador', issued: 'Emitida', paid: 'Pagada', cancelled: 'Anulada' }
+const labels: Record<InvoiceStatus, string> = { draft: 'Borrador', issued: 'Por cobrar', paid: 'Pagada', cancelled: 'Anulada' }
 const today = () => new Date().toISOString().slice(0, 10)
 const uid = () => Math.random().toString(36).slice(2, 10)
 const numberFor = (c: Company) => `${c.prefix || 'FAC'}-${String(c.nextInvoiceNumber || 1).padStart(6, '0')}`
@@ -22,6 +22,12 @@ function blank(c: Company): Invoice {
     taxRate: c.defaultTaxRate || 0, paymentMethod: '', notes: '', currency: c.currency || 'USD',
     createdAt: now, updatedAt: now,
   }
+}
+
+function totalsByCurrency(invoices: Invoice[], status: InvoiceStatus) {
+  const grouped = new Map<string, number>()
+  invoices.filter(i => i.status === status).forEach(i => grouped.set(i.currency, (grouped.get(i.currency) || 0) + totals(i).total))
+  return [...grouped.entries()].map(([currency, value]) => money(value, currency)).join(' · ') || '0,00'
 }
 
 export default function App() {
@@ -56,7 +62,7 @@ export default function App() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return invoices
-    return invoices.filter(i => [i.number, i.client.name, i.client.taxId, i.status, i.date].join(' ').toLowerCase().includes(q))
+    return invoices.filter(i => [i.number, i.client.name, i.client.taxId, labels[i.status], i.status, i.date].join(' ').toLowerCase().includes(q))
   }, [invoices, search])
 
   const startNew = () => { setEditing(blank(company)); setMode('editor') }
@@ -69,6 +75,12 @@ export default function App() {
   const remove = async (i: Invoice) => {
     if (!i.id || !confirm(`¿Eliminar ${i.number}?`)) return
     await db.invoices.delete(i.id); await refresh(); notify('Documento eliminado.')
+  }
+  const changeStatus = async (i: Invoice, status: InvoiceStatus) => {
+    if (!i.id) return
+    await db.invoices.update(i.id, { status, updatedAt: new Date().toISOString() })
+    await refresh()
+    notify(status === 'paid' ? `${i.number} marcada como pagada.` : `${i.number} actualizada.`)
   }
 
   return <div className="app">
@@ -83,7 +95,7 @@ export default function App() {
 
     <main className="page">
       {!online && <div className="offline"><WifiOff size={16}/>Estás sin conexión. Puedes seguir trabajando porque los datos se guardan en este dispositivo.</div>}
-      {mode === 'home' && <HomeView invoices={filtered} all={invoices} search={search} setSearch={setSearch} company={company} onNew={startNew} onEdit={edit} onDuplicate={duplicate} onDelete={remove}/>} 
+      {mode === 'home' && <HomeView invoices={filtered} all={invoices} search={search} setSearch={setSearch} company={company} onNew={startNew} onEdit={edit} onDuplicate={duplicate} onDelete={remove} onStatusChange={changeStatus}/>} 
       {mode === 'editor' && editing && <Editor invoice={editing} company={company} clients={clients} notify={notify} onBack={() => setMode('home')} onSaved={async s => { setEditing(s); await refresh(); notify(`${s.number} guardada.`) }}/>} 
       {mode === 'settings' && <SettingsView company={company} installPrompt={installPrompt} notify={notify} onChanged={refresh} onInstalled={() => setInstallPrompt(null)}/>} 
     </main>
@@ -91,22 +103,22 @@ export default function App() {
   </div>
 }
 
-function HomeView({ invoices, all, search, setSearch, company, onNew, onEdit, onDuplicate, onDelete }: {
+function HomeView({ invoices, all, search, setSearch, company, onNew, onEdit, onDuplicate, onDelete, onStatusChange }: {
   invoices: Invoice[]; all: Invoice[]; search: string; setSearch: (v: string) => void; company: Company;
-  onNew: () => void; onEdit: (i: Invoice) => void; onDuplicate: (i: Invoice) => void; onDelete: (i: Invoice) => void
+  onNew: () => void; onEdit: (i: Invoice) => void; onDuplicate: (i: Invoice) => void; onDelete: (i: Invoice) => void; onStatusChange: (i: Invoice, status: InvoiceStatus) => void
 }) {
-  const pending = all.filter(i => i.status === 'issued').reduce((s, i) => s + totals(i).total, 0)
-  const paid = all.filter(i => i.status === 'paid').reduce((s, i) => s + totals(i).total, 0)
+  const pending = totalsByCurrency(all, 'issued')
+  const paid = totalsByCurrency(all, 'paid')
   return <>
     <section className="hero"><div><span>FACTURACIÓN LOCAL</span><h1>Crea, guarda y comparte facturas en segundos.</h1><p>Los documentos viven en tu dispositivo. Genera PDF y compártelo por WhatsApp, correo o cualquier app compatible.</p></div><button className="heroButton" onClick={onNew}><FilePlus2 size={20}/>Crear documento</button></section>
-    <section className="metrics"><Metric label="Documentos" value={String(all.length)}/><Metric label="Por cobrar" value={money(pending, company.currency)}/><Metric label="Cobrado" value={money(paid, company.currency)}/></section>
+    <section className="metrics"><Metric label="Documentos" value={String(all.length)}/><Metric label="Por cobrar" value={pending}/><Metric label="Cobrado" value={paid}/></section>
     <section className="card">
       <div className="cardHead"><div><h2>Facturas y documentos</h2><p>Abre cualquier documento para modificarlo o compartirlo nuevamente.</p></div><button className="primary" onClick={onNew}><Plus size={18}/>Nuevo</button></div>
       <label className="search"><Search size={18}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por cliente, número, fecha o estado…"/></label>
       {invoices.length ? <div className="list">{invoices.map(i => <article className="row" key={i.id}>
         <button className="doc" onClick={() => onEdit(i)}><span className="fileIcon"><FileText size={19}/></span><span><strong>{i.number}</strong><small>{i.client.name || 'Sin cliente'} · {i.date}</small></span></button>
         <span className={`status ${i.status}`}>{labels[i.status]}</span><strong className="amount">{money(totals(i).total, i.currency)}</strong>
-        <div className="actions"><button title="Editar" onClick={() => onEdit(i)}><Edit3 size={17}/></button><button title="Duplicar" onClick={() => onDuplicate(i)}><Copy size={17}/></button><button title="Eliminar" className="danger" onClick={() => onDelete(i)}><Trash2 size={17}/></button></div>
+        <div className="actions">{i.status === 'issued' && <button title="Marcar como pagada" onClick={() => onStatusChange(i, 'paid')}><Check size={17}/></button>}<button title="Editar" onClick={() => onEdit(i)}><Edit3 size={17}/></button><button title="Duplicar" onClick={() => onDuplicate(i)}><Copy size={17}/></button><button title="Eliminar" className="danger" onClick={() => onDelete(i)}><Trash2 size={17}/></button></div>
       </article>)}</div> : <div className="empty"><ReceiptText size={34}/><h3>{search ? 'Sin resultados' : 'Aún no hay facturas'}</h3><p>{search ? 'Prueba con otro término.' : 'Crea tu primer documento para comenzar.'}</p>{!search && <button className="primary" onClick={onNew}>Crear factura</button>}</div>}
     </section>
   </>
@@ -134,7 +146,7 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
       if (!existing) existing = clients.find(c => c.name.toLowerCase() === invoice.client.name.trim().toLowerCase())
       const clientPayload: Client = { ...invoice.client, id: existing?.id, createdAt: existing?.createdAt || new Date().toISOString() }
       const clientId = existing?.id ? (await db.clients.put(clientPayload), existing.id) : Number(await db.clients.add(clientPayload))
-      const payload: Invoice = { ...invoice, clientId, status: status || invoice.status, items: validItems, updatedAt: new Date().toISOString() }
+      const payload: Invoice = { ...invoice, clientId, status: status ?? invoice.status, items: validItems, updatedAt: new Date().toISOString() }
       let id = invoice.id
       if (id) await db.invoices.put(payload)
       else { id = Number(await db.invoices.add(payload)); await db.company.update(1, { nextInvoiceNumber: (company.nextInvoiceNumber || 1) + 1 }) }
@@ -186,7 +198,7 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
         <Field label="Tipo"><select value={invoice.type} onChange={e => set('type', e.target.value as Invoice['type'])}><option>Factura</option><option>Proforma</option><option>Presupuesto</option></select></Field>
         <Field label="Número"><input value={invoice.number} onChange={e => set('number', e.target.value)}/></Field>
         <Field label="Fecha"><input type="date" value={invoice.date} onChange={e => set('date', e.target.value)}/></Field>
-        <Field label="Estado"><select value={invoice.status} onChange={e => set('status', e.target.value as InvoiceStatus)}><option value="draft">Borrador</option><option value="issued">Emitida</option><option value="paid">Pagada</option><option value="cancelled">Anulada</option></select></Field>
+        <Field label="Estado"><select value={invoice.status} onChange={e => set('status', e.target.value as InvoiceStatus)}><option value="draft">Borrador</option><option value="issued">Por cobrar</option><option value="paid">Pagada</option><option value="cancelled">Anulada</option></select></Field>
       </div></section>
       <section className="card formCard"><h2>2. Cliente</h2>{clients.length > 0 && <Field label="Cliente guardado"><select defaultValue="" onChange={e => { const c = clients.find(x => String(x.id) === e.target.value); if (c) setInvoice(p => ({ ...p, clientId: c.id, client: { name: c.name, taxId: c.taxId, phone: c.phone, email: c.email, address: c.address } })) }}><option value="">Seleccionar…</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>}
         <div className="grid2"><Field label="Nombre / razón social"><input value={invoice.client.name} onChange={e => setClient('name', e.target.value)}/></Field><Field label="RIF / RUC / C.I."><input value={invoice.client.taxId} onChange={e => setClient('taxId', e.target.value)}/></Field><Field label="Teléfono"><input value={invoice.client.phone} onChange={e => setClient('phone', e.target.value)} placeholder="Incluye código de país"/></Field><Field label="Correo"><input type="email" value={invoice.client.email} onChange={e => setClient('email', e.target.value)}/></Field><Field label="Dirección" wide><input value={invoice.client.address} onChange={e => setClient('address', e.target.value)}/></Field></div>
@@ -194,8 +206,29 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
       <section className="card formCard"><h2>3. Productos o servicios</h2><div className="items"><div className="itemLabels"><span>Descripción</span><span>Cant.</span><span>Precio</span><span>Total</span><span></span></div>{invoice.items.map(item => <div className="item" key={item.id}><input value={item.description} onChange={e => setItem(item.id, { description: e.target.value })} placeholder="Descripción"/><NumericInput value={item.quantity} onChange={value => setItem(item.id, { quantity: value })}/><NumericInput value={item.unitPrice} onChange={value => setItem(item.id, { unitPrice: value })}/><strong>{money(item.quantity * item.unitPrice, invoice.currency)}</strong><button className="danger icon" disabled={invoice.items.length === 1} onClick={() => set('items', invoice.items.filter(x => x.id !== item.id))}><Trash2 size={17}/></button></div>)}</div><button className="secondary add" onClick={() => set('items', [...invoice.items, { id: uid(), description: '', quantity: 1, unitPrice: 0 }])}><Plus size={18}/>Agregar línea</button></section>
       <section className="card formCard"><h2>4. Pago y notas</h2><div className="grid2"><Field label="Forma de pago"><input value={invoice.paymentMethod} onChange={e => set('paymentMethod', e.target.value)} placeholder="Efectivo, transferencia, tarjeta…"/></Field><Field label="Moneda"><select value={invoice.currency} onChange={e => set('currency', e.target.value)}><option>USD</option><option>EUR</option><option>VES</option><option>COP</option></select></Field><Field label="Descuento"><NumericInput value={invoice.discount} onChange={value => set('discount', value)}/></Field><Field label="IVA / impuesto %"><NumericInput value={invoice.taxRate} onChange={value => set('taxRate', value)}/></Field><Field label="Observaciones" wide><textarea rows={3} value={invoice.notes} onChange={e => set('notes', e.target.value)}/></Field></div></section>
     </section>
-    <aside className="summary card"><span>RESUMEN</span><Line label="Subtotal" value={money(sum.subtotal, invoice.currency)}/><Line label="Descuento" value={`- ${money(sum.discount, invoice.currency)}`}/><Line label={`Impuesto ${invoice.taxRate}%`} value={money(sum.tax, invoice.currency)}/><div className="total"><span>Total</span><strong>{money(sum.total, invoice.currency)}</strong></div><button className="primary full" disabled={saving} onClick={() => save('issued')}><Check size={18}/>{saving ? 'Guardando…' : 'Guardar y emitir'}</button><button className="secondary full" disabled={saving} onClick={() => save('draft')}><Save size={18}/>Guardar borrador</button><hr/><button className="secondary full" onClick={share}><Share2 size={18}/>Compartir PDF</button><button className="secondary full whatsapp" onClick={whatsapp}><Send size={18}/>Enviar por WhatsApp</button><button className="secondary full" onClick={email}><Mail size={18}/>Preparar correo</button><button className="ghost full" onClick={download}><Download size={18}/>Descargar PDF</button><small>En móviles compatibles, WhatsApp recibe el mensaje y el PDF juntos mediante el menú de compartir del sistema.</small></aside>
+    <aside className="summary card"><span>RESUMEN</span><Line label="Subtotal" value={money(sum.subtotal, invoice.currency)}/><Line label="Descuento" value={`- ${money(sum.discount, invoice.currency)}`}/><Line label={`Impuesto ${invoice.taxRate}%`} value={money(sum.tax, invoice.currency)}/><div className="total"><span>Total</span><strong>{money(sum.total, invoice.currency)}</strong></div>{invoice.id ? <button className="primary full" disabled={saving} onClick={() => save()}><Save size={18}/>{saving ? 'Guardando…' : 'Guardar cambios'}</button> : <button className="primary full" disabled={saving} onClick={() => save('issued')}><Check size={18}/>{saving ? 'Guardando…' : 'Guardar y emitir'}</button>}{invoice.status === 'issued' && <button className="secondary full" disabled={saving} onClick={() => save('paid')}><Check size={18}/>Marcar como pagada</button>}<button className="secondary full" disabled={saving} onClick={() => save('draft')}><Save size={18}/>Guardar borrador</button><hr/><button className="secondary full" onClick={share}><Share2 size={18}/>Compartir PDF</button><button className="secondary full whatsapp" onClick={whatsapp}><Send size={18}/>Enviar por WhatsApp</button><button className="secondary full" onClick={email}><Mail size={18}/>Preparar correo</button><button className="ghost full" onClick={download}><Download size={18}/>Descargar PDF</button><small>En móviles compatibles, WhatsApp recibe el mensaje y el PDF juntos mediante el menú de compartir del sistema.</small></aside>
   </div>
+}
+
+function parseFlexibleNumber(raw: string) {
+  let value = raw.trim().replace(/\s/g, '').replace(/[^0-9,.-]/g, '')
+  if (!value) return NaN
+  const lastComma = value.lastIndexOf(',')
+  const lastDot = value.lastIndexOf('.')
+  if (lastComma >= 0 && lastDot >= 0) {
+    const decimal = lastComma > lastDot ? ',' : '.'
+    const thousands = decimal === ',' ? /\./g : /,/g
+    value = value.replace(thousands, '').replace(decimal, '.')
+  } else if (lastComma >= 0) {
+    const parts = value.split(',')
+    value = parts.length > 2 ? parts.join('') : `${parts[0]}.${parts[1] ?? ''}`
+  } else if (lastDot >= 0) {
+    const parts = value.split('.')
+    if (parts.length > 2) value = parts.join('')
+    else if (parts[1]?.length === 3 && parts[0].length >= 1) value = parts.join('')
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : NaN
 }
 
 function NumericInput({ value, onChange, min = 0, step = '0.01' }: { value: number; onChange: (value: number) => void; min?: number; step?: string }) {
@@ -206,27 +239,36 @@ function NumericInput({ value, onChange, min = 0, step = '0.01' }: { value: numb
     if (document.activeElement !== inputRef.current) setDraft(String(value))
   }, [value])
 
+  const commit = (raw: string) => {
+    const parsed = parseFlexibleNumber(raw)
+    const next = raw.trim() === '' || !Number.isFinite(parsed) ? min : Math.max(min, parsed)
+    onChange(next)
+    setDraft(String(next))
+  }
+
   return <input
     ref={inputRef}
-    type="number"
+    type="text"
     inputMode="decimal"
-    min={min}
-    step={step}
     value={draft}
-    onFocus={() => { if (Number(draft) === 0) setDraft('') }}
+    onFocus={() => { if (parseFlexibleNumber(draft) === 0) setDraft('') }}
+    onPaste={e => {
+      e.preventDefault()
+      const pasted = e.clipboardData.getData('text')
+      setDraft(pasted)
+      const parsed = parseFlexibleNumber(pasted)
+      if (Number.isFinite(parsed)) onChange(Math.max(min, parsed))
+    }}
     onChange={e => {
       const raw = e.target.value
       setDraft(raw)
       if (raw.trim() === '') return
-      const parsed = Number(raw)
+      const parsed = parseFlexibleNumber(raw)
       if (Number.isFinite(parsed)) onChange(Math.max(min, parsed))
     }}
-    onBlur={() => {
-      const parsed = Number(draft)
-      const next = draft.trim() === '' || !Number.isFinite(parsed) ? min : Math.max(min, parsed)
-      onChange(next)
-      setDraft(String(next))
-    }}
+    onBlur={() => commit(draft)}
+    aria-label="Valor numérico"
+    data-step={step}
   />
 }
 
