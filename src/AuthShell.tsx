@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, CheckCircle2, Cloud, CloudOff, DollarSign, LogOut, ReceiptText, ShieldCheck, Wallet, WalletCards } from 'lucide-react'
+import { BarChart3, CheckCircle2, Cloud, CloudOff, DollarSign, Eye, EyeOff, LogOut, Mail, ReceiptText, ShieldCheck, UserPlus, Wallet, WalletCards } from 'lucide-react'
 import AdminDashboard from './AdminDashboard'
 import App from './App'
 import PaymentsView from './PaymentsView'
 import ReceivablesView from './ReceivablesView'
-import { db, ensureCompany } from './db'
-import { firebaseConfigured, observeAuth, signInWithGoogle, signOutFirebase, type FirebaseUser } from './firebase'
+import { db, defaultCompany, ensureCompany } from './db'
+import { createEmailAccount, firebaseConfigured, observeAuth, requestPasswordReset, signInWithEmail, signInWithGoogle, signOutFirebase, type FirebaseUser } from './firebase'
 import { startFirebaseSync, syncFirebaseNow, type SyncState } from './firebaseSync'
 import './auth.css'
 import './admin.css'
 
 const LOCAL_UID_KEY = 'zivifactura.firebase.uid'
 type Workspace = 'billing' | 'receivables' | 'payments' | 'income' | 'stats'
+type AuthMode = 'login' | 'signup'
 
 async function prepareLocalAccount(uid: string) {
   const previousUid = localStorage.getItem(LOCAL_UID_KEY)
@@ -43,39 +44,189 @@ function LegalLinks({ compact = false }: { compact?: boolean }) {
   </nav>
 }
 
+function authError(error: unknown) {
+  const code = (error as { code?: string })?.code || ''
+  if (code === 'auth/email-already-in-use') return 'Ese correo ya tiene una cuenta. Inicia sesión o recupera la contraseña.'
+  if (code === 'auth/weak-password') return 'La contraseña debe tener al menos 6 caracteres.'
+  if (code === 'auth/invalid-email') return 'Escribe un correo electrónico válido.'
+  if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') return 'Correo o contraseña incorrectos.'
+  if (code === 'auth/operation-not-allowed') return 'El acceso con correo y contraseña todavía no está habilitado en Firebase Authentication.'
+  if (code === 'auth/too-many-requests') return 'Hubo demasiados intentos. Espera unos minutos e inténtalo nuevamente.'
+  if (code === 'auth/network-request-failed') return 'No se pudo conectar. Verifica tu conexión a internet.'
+  const message = error instanceof Error ? error.message : 'No se pudo completar la operación.'
+  return message.replace('Firebase:', '').trim()
+}
+
 function LoginScreen({ onLocal }: { onLocal: () => void }) {
+  const [mode, setMode] = useState<AuthMode>('login')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [signup, setSignup] = useState({
+    fullName: '', companyName: '', taxId: '', phone: '', email: '', password: '', confirmPassword: '',
+    address: '', city: '', currency: 'USD', defaultTaxRate: '0', prefix: 'FAC',
+    mobilePaymentBank: '', mobilePaymentPhone: '', mobilePaymentId: '',
+    bankName: '', bankAccountType: '', bankAccountNumber: '', bankAccountHolder: '',
+    binanceId: '', paymentNotes: '',
+  })
 
-  async function login() {
+  const switchMode = (next: AuthMode) => {
+    setMode(next)
+    setError('')
+    setNotice('')
+  }
+
+  async function googleLogin() {
     setBusy(true)
     setError('')
+    setNotice('')
     try {
       await signInWithGoogle()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'No se pudo iniciar sesión con Google.'
-      setError(message.replace('Firebase:', '').trim())
+      setError(authError(err))
       setBusy(false)
     }
   }
 
+  async function emailLogin(event: React.FormEvent) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      await signInWithEmail(email, password)
+    } catch (err) {
+      setError(authError(err))
+      setBusy(false)
+    }
+  }
+
+  async function resetPassword() {
+    if (!email.trim()) return setError('Escribe tu correo arriba para enviarte el enlace de recuperación.')
+    setBusy(true)
+    setError('')
+    try {
+      await requestPasswordReset(email)
+      setNotice('Te enviamos un enlace para restablecer tu contraseña. Revisa también la carpeta de spam.')
+    } catch (err) {
+      setError(authError(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function register(event: React.FormEvent) {
+    event.preventDefault()
+    setError('')
+    setNotice('')
+    if (!signup.fullName.trim() || !signup.companyName.trim() || !signup.phone.trim() || !signup.email.trim()) return setError('Completa nombre, empresa, teléfono y correo electrónico.')
+    if (signup.password.length < 6) return setError('La contraseña debe tener al menos 6 caracteres.')
+    if (signup.password !== signup.confirmPassword) return setError('Las contraseñas no coinciden.')
+    setBusy(true)
+    try {
+      const credential = await createEmailAccount(signup.fullName, signup.email, signup.password)
+      await prepareLocalAccount(credential.user.uid)
+      await db.company.put({
+        ...defaultCompany,
+        id: 1,
+        name: signup.companyName.trim(),
+        taxId: signup.taxId.trim(),
+        phone: signup.phone.trim(),
+        email: signup.email.trim().toLowerCase(),
+        address: signup.address.trim(),
+        city: signup.city.trim(),
+        currency: signup.currency,
+        defaultTaxRate: Math.max(0, Number(signup.defaultTaxRate) || 0),
+        prefix: signup.prefix.trim().toUpperCase().slice(0, 8) || 'FAC',
+        mobilePaymentBank: signup.mobilePaymentBank.trim(),
+        mobilePaymentPhone: signup.mobilePaymentPhone.trim(),
+        mobilePaymentId: signup.mobilePaymentId.trim(),
+        bankName: signup.bankName.trim(),
+        bankAccountType: signup.bankAccountType.trim(),
+        bankAccountNumber: signup.bankAccountNumber.trim(),
+        bankAccountHolder: signup.bankAccountHolder.trim(),
+        binanceId: signup.binanceId.trim(),
+        paymentNotes: signup.paymentNotes.trim(),
+      })
+      await syncFirebaseNow(credential.user.uid)
+    } catch (err) {
+      setError(authError(err))
+      setBusy(false)
+    }
+  }
+
+  const updateSignup = (key: keyof typeof signup, value: string) => setSignup(current => ({ ...current, [key]: value }))
+
   return <main className="authScreen">
-    <section className="authPanel">
+    <section className={`authPanel ${mode === 'signup' ? 'signupPanel' : ''}`}>
       <div className="authBrand"><span><ShieldCheck size={28}/></span><div><strong>ZiviFactura</strong><small>Zivi Dynamics C.A.</small></div></div>
-      <div className="authCopy">
-        <span className="eyebrow">TU FACTURACIÓN, AHORA EN LA NUBE</span>
-        <h1>Entra con Google y conserva tus facturas en todos tus dispositivos.</h1>
-        <p>La aplicación seguirá trabajando localmente cuando no tengas conexión y sincronizará con Firebase cuando vuelvas a estar en línea.</p>
+      <div className="authCopy compactCopy">
+        <span className="eyebrow">FACTURACIÓN Y CONTROL ADMINISTRATIVO</span>
+        <h1>{mode === 'login' ? 'Entra a tu cuenta.' : 'Crea tu cuenta y empieza a facturar.'}</h1>
+        <p>{mode === 'login' ? 'Tus facturas, cobros, cuentas por cobrar y estadísticas pueden acompañarte en todos tus dispositivos.' : 'Configuraremos desde el inicio los datos principales de tu empresa para que puedas comenzar sin pasos innecesarios.'}</p>
       </div>
-      <div className="authBenefits">
-        <div><Cloud size={19}/><span><strong>Respaldo en Firestore</strong><small>Facturas, cobros, clientes, productos y configuración.</small></span></div>
-        <div><ShieldCheck size={19}/><span><strong>Datos separados por usuario</strong><small>Cada cuenta de Google accede únicamente a su información.</small></span></div>
-        <div><CheckCircle2 size={19}/><span><strong>Local-first</strong><small>Si falla internet, puedes seguir facturando.</small></span></div>
+
+      <div className="authTabs" role="tablist">
+        <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}><Mail size={16}/>Iniciar sesión</button>
+        <button type="button" className={mode === 'signup' ? 'active' : ''} onClick={() => switchMode('signup')}><UserPlus size={16}/>Crear cuenta</button>
       </div>
-      <button className="googleButton" disabled={busy} onClick={login}><GoogleMark/>{busy ? 'Conectando…' : 'Continuar con Google'}</button>
+
+      {mode === 'login' ? <form className="authForm" onSubmit={emailLogin}>
+        <label><span>Correo electrónico</span><input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="tu@correo.com" required/></label>
+        <label><span>Contraseña</span><div className="passwordField"><input type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Tu contraseña" required/><button type="button" aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}</button></div></label>
+        <button className="primaryAuth" disabled={busy} type="submit">{busy ? 'Ingresando…' : 'Iniciar sesión'}</button>
+        <button className="forgotPassword" disabled={busy} type="button" onClick={() => void resetPassword()}>¿Olvidaste tu contraseña?</button>
+      </form> : <form className="authForm signupForm" onSubmit={register}>
+        <div className="signupSection"><strong>Tu cuenta</strong><small>Información del responsable de la cuenta.</small></div>
+        <div className="signupGrid">
+          <label><span>Nombre y apellido *</span><input value={signup.fullName} onChange={event => updateSignup('fullName', event.target.value)} autoComplete="name" required/></label>
+          <label><span>Teléfono *</span><input value={signup.phone} onChange={event => updateSignup('phone', event.target.value)} inputMode="tel" autoComplete="tel" placeholder="0412..." required/></label>
+          <label className="wide"><span>Correo electrónico *</span><input type="email" value={signup.email} onChange={event => updateSignup('email', event.target.value)} autoComplete="email" placeholder="tu@correo.com" required/></label>
+          <label><span>Contraseña *</span><input type="password" value={signup.password} onChange={event => updateSignup('password', event.target.value)} autoComplete="new-password" minLength={6} required/></label>
+          <label><span>Confirmar contraseña *</span><input type="password" value={signup.confirmPassword} onChange={event => updateSignup('confirmPassword', event.target.value)} autoComplete="new-password" minLength={6} required/></label>
+        </div>
+
+        <div className="signupSection"><strong>Datos de tu empresa</strong><small>Se guardarán directamente en Configuración y en tus próximos documentos.</small></div>
+        <div className="signupGrid">
+          <label><span>Empresa / razón social *</span><input value={signup.companyName} onChange={event => updateSignup('companyName', event.target.value)} required/></label>
+          <label><span>RIF / RUC / identificación fiscal</span><input value={signup.taxId} onChange={event => updateSignup('taxId', event.target.value)}/></label>
+          <label><span>Ciudad</span><input value={signup.city} onChange={event => updateSignup('city', event.target.value)}/></label>
+          <label><span>Moneda principal</span><select value={signup.currency} onChange={event => updateSignup('currency', event.target.value)}><option>USD</option><option>EUR</option><option>VES</option><option>USDT</option><option>COP</option></select></label>
+          <label className="wide"><span>Dirección</span><input value={signup.address} onChange={event => updateSignup('address', event.target.value)}/></label>
+          <label><span>Impuesto predeterminado %</span><input type="number" min="0" step="0.01" value={signup.defaultTaxRate} onChange={event => updateSignup('defaultTaxRate', event.target.value)}/></label>
+          <label><span>Prefijo de facturas</span><input value={signup.prefix} onChange={event => updateSignup('prefix', event.target.value.toUpperCase())} maxLength={8}/></label>
+        </div>
+
+        <details className="signupOptional">
+          <summary>Agregar datos de cobro ahora <span>Opcional</span></summary>
+          <div className="signupGrid optionalGrid">
+            <label><span>Banco para pago móvil</span><input value={signup.mobilePaymentBank} onChange={event => updateSignup('mobilePaymentBank', event.target.value)}/></label>
+            <label><span>Teléfono pago móvil</span><input value={signup.mobilePaymentPhone} onChange={event => updateSignup('mobilePaymentPhone', event.target.value)} inputMode="tel"/></label>
+            <label className="wide"><span>Cédula / RIF pago móvil</span><input value={signup.mobilePaymentId} onChange={event => updateSignup('mobilePaymentId', event.target.value)}/></label>
+            <label><span>Banco / cuenta</span><input value={signup.bankName} onChange={event => updateSignup('bankName', event.target.value)}/></label>
+            <label><span>Tipo de cuenta</span><input value={signup.bankAccountType} onChange={event => updateSignup('bankAccountType', event.target.value)} placeholder="Corriente / Ahorro"/></label>
+            <label className="wide"><span>Número de cuenta</span><input value={signup.bankAccountNumber} onChange={event => updateSignup('bankAccountNumber', event.target.value)}/></label>
+            <label className="wide"><span>Titular de la cuenta</span><input value={signup.bankAccountHolder} onChange={event => updateSignup('bankAccountHolder', event.target.value)}/></label>
+            <label className="wide"><span>Binance Pay ID / correo</span><input value={signup.binanceId} onChange={event => updateSignup('binanceId', event.target.value)}/></label>
+            <label className="wide"><span>Otras instrucciones de pago</span><textarea rows={3} value={signup.paymentNotes} onChange={event => updateSignup('paymentNotes', event.target.value)}/></label>
+          </div>
+        </details>
+
+        <button className="primaryAuth" disabled={busy} type="submit">{busy ? 'Creando cuenta…' : 'Crear mi cuenta'}</button>
+        <small className="signupConsent">Al crear una cuenta aceptas los <a href="/terminos.html" target="_blank" rel="noreferrer">Términos</a> y confirmas que leíste la <a href="/privacidad.html" target="_blank" rel="noreferrer">Política de Privacidad</a>.</small>
+      </form>}
+
+      <div className="authDivider"><span>o continúa de forma segura con</span></div>
+      <button className="googleButton" disabled={busy} onClick={googleLogin}><GoogleMark/>{busy ? 'Conectando…' : 'Continuar con Google'}</button>
+      <div className="googleTrust"><ShieldCheck size={15}/><span>Google solo identifica tu cuenta. ZiviFactura no recibe tu contraseña ni solicita acceso a Gmail, Drive, contactos o calendario.</span></div>
+
       {error && <div className="authError">{error}</div>}
-      <button className="localFallback" onClick={onLocal}>Continuar temporalmente sin sincronización</button>
-      <small className="authLegal">Al iniciar sesión, ZiviFactura utiliza Firebase Authentication para identificar tu cuenta y Firestore para sincronizar tus datos.</small>
+      {notice && <div className="authNotice">{notice}</div>}
+      <button className="localFallback" onClick={onLocal}>Entrar sin cuenta · solo en este dispositivo</button>
+      <small className="authLegal">Las cuentas se autentican con Firebase Authentication y los datos sincronizados se organizan por usuario en Firestore.</small>
       <LegalLinks/>
     </section>
   </main>
@@ -87,7 +238,7 @@ function AccountBar({ user, state, message, onLogout }: { user: FirebaseUser; st
     <div className="syncState">{icon}<span>{message || (state === 'syncing' ? 'Sincronizando…' : 'Firebase conectado')}</span></div>
     <div className="accountIdentity">
       {user.photoURL ? <img src={user.photoURL} alt="" referrerPolicy="no-referrer"/> : <span className="accountInitial">{(user.displayName || user.email || 'U')[0]}</span>}
-      <span><strong>{user.displayName || 'Cuenta Google'}</strong><small>{user.email}</small></span>
+      <span><strong>{user.displayName || 'Cuenta ZiviFactura'}</strong><small>{user.email}</small></span>
       <button title="Cerrar sesión" onClick={onLogout}><LogOut size={17}/></button>
     </div>
   </div>
