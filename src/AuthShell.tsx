@@ -28,6 +28,15 @@ function GoogleMark() {
   return <span className="googleMark" aria-hidden="true">G</span>
 }
 
+function LegalLinks({ compact = false }: { compact?: boolean }) {
+  return <nav className={compact ? 'authLegalLinks compact' : 'authLegalLinks'} aria-label="Información legal">
+    <a href="/privacidad.html" target="_blank" rel="noreferrer">Privacidad</a>
+    <a href="/terminos.html" target="_blank" rel="noreferrer">Términos</a>
+    <a href="/cookies.html" target="_blank" rel="noreferrer">Cookies</a>
+    <a href="/acerca.html" target="_blank" rel="noreferrer">Acerca de</a>
+  </nav>
+}
+
 function LoginScreen({ onLocal }: { onLocal: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -61,6 +70,7 @@ function LoginScreen({ onLocal }: { onLocal: () => void }) {
       {error && <div className="authError">{error}</div>}
       <button className="localFallback" onClick={onLocal}>Continuar temporalmente sin sincronización</button>
       <small className="authLegal">Al iniciar sesión, ZiviFactura utiliza Firebase Authentication para identificar tu cuenta y Firestore para sincronizar tus datos.</small>
+      <LegalLinks/>
     </section>
   </main>
 }
@@ -114,12 +124,13 @@ export default function AuthShell() {
     await signOutFirebase()
   }
 
-  if (!firebaseConfigured || localOnly) return <App/>
+  if (!firebaseConfigured || localOnly) return <><App/><footer className="appLegalFooter"><LegalLinks compact/></footer></>
   if (!authReady) return <main className="authLoading"><div className="authSpinner"/><strong>Preparando ZiviFactura…</strong></main>
   if (!user) return <LoginScreen onLocal={() => setLocalOnly(true)}/>
 
   return <>
     <AccountBar user={user} state={syncState} message={syncMessage} onLogout={logout}/>
     <App/>
+    <footer className="appLegalFooter"><LegalLinks compact/></footer>
   </>
 }
