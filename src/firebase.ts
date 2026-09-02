@@ -2,13 +2,15 @@ import { getApps, initializeApp } from 'firebase/app'
 import { browserLocalPersistence, getAuth, GoogleAuthProvider, onAuthStateChanged, setPersistence, signInWithPopup, signInWithRedirect, signOut, type User } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
+// Firebase Web config is safe to ship in the client. Environment variables still
+// take precedence so the deployment can override these values without code changes.
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyBuuntT-Bpk_-tlKslOG5a2UeqPenCQ6uk',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'zivifactura.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'zivifactura',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'zivifactura.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '276549383437',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:276549383437:web:212612caed5710d9ddec44',
 }
 
 export const firebaseConfigured = Boolean(
