@@ -6,13 +6,12 @@
   <meta name="theme-color" content="#0b1633"/>
   <title>Datos de pago y comprobante | ZiviFactura</title>
   <style>
-    *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f7fd;color:#17243d}
-    button,input,select,textarea{font:inherit}.top{background:linear-gradient(135deg,#0b1633,#1d4ed8 68%,#06b6d4);color:#fff;padding:28px 18px 86px}.top>div,.wrap{width:min(100%,760px);margin:auto}.brand{display:flex;align-items:center;gap:10px;font-weight:850}.mark{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.13);font-size:20px}.top h1{font-size:clamp(2rem,9vw,3.3rem);line-height:1;margin:30px 0 10px;letter-spacing:-.05em}.top p{margin:0;color:#d7e8ff;line-height:1.55;max-width:680px}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f7fd;color:#17243d}button,input,select,textarea{font:inherit}
+    .top{background:linear-gradient(135deg,#0b1633,#1d4ed8 68%,#06b6d4);color:#fff;padding:28px 18px 86px}.top>div,.wrap{width:min(100%,760px);margin:auto}.brand{display:flex;align-items:center;gap:10px;font-weight:850}.mark{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.13);font-size:20px}.top h1{font-size:clamp(2rem,9vw,3.3rem);line-height:1;margin:30px 0 10px;letter-spacing:-.05em}.top p{margin:0;color:#d7e8ff;line-height:1.55;max-width:680px}
     .wrap{margin-top:-54px;padding:0 14px 42px}.card{background:#fff;border:1px solid #e0e8f3;border-radius:20px;box-shadow:0 18px 50px rgba(31,52,90,.11);padding:20px;margin-bottom:14px}.summary{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start}.eyebrow{display:block;font-size:.7rem;font-weight:850;letter-spacing:.12em;color:#2563eb}.summary h2{margin:5px 0 4px;font-size:1.25rem}.summary small{color:#738096}.total{text-align:right}.total span{display:block;color:#758198;font-size:.72rem}.total strong{display:block;font-size:1.25rem;margin-top:4px;color:#0f1f39}
-    .sectionTitle{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.sectionTitle h3{margin:0;font-size:1rem}.sectionTitle p{margin:4px 0 0;color:#758399;font-size:.78rem;line-height:1.45}.sectionTitle small{color:#7a879a;white-space:nowrap}.rows{display:grid;gap:8px}.row{border:1px solid #e5ebf4;background:#f9fbfe;border-radius:13px;padding:11px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}.row span{font-size:.72rem;color:#758399;display:block;margin-bottom:3px}.row strong{font-size:.93rem;overflow-wrap:anywhere}.copy{border:0;background:#eaf2ff;color:#1d4ed8;border-radius:10px;min-height:38px;padding:0 12px;font-weight:800}.copy.done{background:#dcfce7;color:#166534}
-    .group{margin-top:16px}.group:first-child{margin-top:0}.group h4{margin:0 0 8px;font-size:.8rem;color:#41506a;text-transform:uppercase;letter-spacing:.07em}.all{width:100%;min-height:50px;border:0;border-radius:14px;background:linear-gradient(135deg,#2563eb,#0ea5e9);color:#fff;font-weight:850;font-size:.95rem}.notice{border:1px solid #cfe2ff;background:#eff6ff;color:#355172;border-radius:14px;padding:13px 14px;font-size:.78rem;line-height:1.55}.error{display:none;border:1px solid #fecaca;background:#fff1f2;color:#9f1239;border-radius:16px;padding:18px}.footer{text-align:center;color:#8490a3;font-size:.72rem;padding-top:7px}.footer a{color:#2563eb;text-decoration:none}
+    .sectionTitle{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.sectionTitle h3{margin:0;font-size:1rem}.sectionTitle p{margin:4px 0 0;color:#758399;font-size:.78rem;line-height:1.45}.sectionTitle small{color:#7a879a;white-space:nowrap}.rows{display:grid;gap:8px}.row{border:1px solid #e5ebf4;background:#f9fbfe;border-radius:13px;padding:11px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}.row span{font-size:.72rem;color:#758399;display:block;margin-bottom:3px}.row strong{font-size:.93rem;overflow-wrap:anywhere}.copy{border:0;background:#eaf2ff;color:#1d4ed8;border-radius:10px;min-height:38px;padding:0 12px;font-weight:800}.copy.done{background:#dcfce7;color:#166534}.group{margin-top:16px}.group:first-child{margin-top:0}.group h4{margin:0 0 8px;font-size:.8rem;color:#41506a;text-transform:uppercase;letter-spacing:.07em}.all{width:100%;min-height:50px;border:0;border-radius:14px;background:linear-gradient(135deg,#2563eb,#0ea5e9);color:#fff;font-weight:850;font-size:.95rem}.notice{border:1px solid #cfe2ff;background:#eff6ff;color:#355172;border-radius:14px;padding:13px 14px;font-size:.78rem;line-height:1.55}.error{display:none;border:1px solid #fecaca;background:#fff1f2;color:#9f1239;border-radius:16px;padding:18px}.footer{text-align:center;color:#8490a3;font-size:.72rem;padding-top:7px}.footer a{color:#2563eb;text-decoration:none}
     .proofCard{border:1px solid #cbdcff;background:linear-gradient(145deg,#fff,#f7fbff)}.proofHero{display:flex;gap:12px;align-items:flex-start;margin-bottom:16px}.proofIcon{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:#eaf2ff;color:#1d4ed8;font-size:21px;flex:none}.proofHero h3{margin:0 0 5px;font-size:1.08rem}.proofHero p{margin:0;color:#67758c;font-size:.8rem;line-height:1.5}.formGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:grid;gap:6px}.field.wide{grid-column:1/-1}.field span{font-size:.72rem;font-weight:780;color:#53627a}.field input,.field select,.field textarea{width:100%;min-height:46px;border:1px solid #dce5f1;border-radius:12px;background:#fff;padding:10px 12px;color:#17243d;outline:none}.field textarea{resize:vertical}.field input:focus,.field select:focus,.field textarea:focus{border-color:#60a5fa;box-shadow:0 0 0 3px rgba(96,165,250,.12)}
-    .uploadBox{grid-column:1/-1;border:1.5px dashed #9eb9e9;background:#f7faff;border-radius:15px;padding:15px;text-align:center}.uploadBox input{display:none}.uploadBox label{display:grid;gap:4px;cursor:pointer}.uploadBox strong{color:#1d4ed8}.uploadBox small{color:#77859a}.fileName{margin-top:8px;color:#33445f;font-size:.76rem;font-weight:720}.submit{grid-column:1/-1;width:100%;min-height:52px;border:0;border-radius:14px;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;font-weight:850;font-size:.96rem}.submit:disabled{opacity:.55;cursor:not-allowed}.proofMessage{display:none;grid-column:1/-1;border-radius:13px;padding:12px 13px;font-size:.8rem;line-height:1.5}.proofMessage.ok{display:block;background:#ecfdf3;border:1px solid #bbf7d0;color:#166534}.proofMessage.bad{display:block;background:#fff1f2;border:1px solid #fecaca;color:#9f1239}.proofDisabled{border:1px solid #fde68a;background:#fffbeb;color:#854d0e;border-radius:13px;padding:12px 13px;font-size:.78rem;line-height:1.5}
+    .uploadBox{grid-column:1/-1;border:1.5px dashed #9eb9e9;background:#f7faff;border-radius:15px;padding:15px;text-align:center}.uploadBox input{display:none}.uploadBox label{display:grid;gap:4px;cursor:pointer}.uploadBox strong{color:#1d4ed8}.uploadBox small{color:#77859a}.fileName{margin-top:8px;color:#33445f;font-size:.76rem;font-weight:720}.preview{display:none;max-width:100%;max-height:310px;margin:12px auto 0;border-radius:12px;border:1px solid #d9e4f2}.submit{grid-column:1/-1;width:100%;min-height:52px;border:0;border-radius:14px;background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;font-weight:850;font-size:.96rem}.submit:disabled{opacity:.55;cursor:not-allowed}.proofMessage{display:none;grid-column:1/-1;border-radius:13px;padding:12px 13px;font-size:.8rem;line-height:1.5}.proofMessage.ok{display:block;background:#ecfdf3;border:1px solid #bbf7d0;color:#166534}.proofMessage.bad{display:block;background:#fff1f2;border:1px solid #fecaca;color:#9f1239}.proofDisabled{border:1px solid #fde68a;background:#fffbeb;color:#854d0e;border-radius:13px;padding:12px 13px;font-size:.78rem;line-height:1.5}
     @media(max-width:560px){.top{padding-top:20px}.summary{grid-template-columns:1fr}.total{text-align:left}.row{grid-template-columns:1fr auto}.card{padding:16px}.wrap{padding-left:10px;padding-right:10px}.formGrid{grid-template-columns:1fr}.field.wide,.uploadBox,.submit,.proofMessage{grid-column:auto}}
   </style>
 </head>
@@ -27,7 +26,7 @@
       <article class="card"><button id="copyAll" class="all" type="button">Copiar todos los datos</button></article>
 
       <article class="card proofCard">
-        <div class="proofHero"><div class="proofIcon">✓</div><div><h3>¿Ya realizaste el pago?</h3><p>Carga el comprobante aquí. El emisor recibirá el monto informado, método, referencia y voucher dentro de ZiviFactura para revisarlo y registrar el cobro.</p></div></div>
+        <div class="proofHero"><div class="proofIcon">✓</div><div><h3>¿Ya realizaste el pago?</h3><p>Carga una imagen del comprobante. ZiviFactura la reduce automáticamente para que llegue al emisor sin llenar tu teléfono ni requerir Firebase Storage.</p></div></div>
         <div id="proofDisabled" class="proofDisabled" hidden>Esta factura fue generada sin una cuenta en la nube. Puedes copiar los datos de pago, pero la carga automática del comprobante no está disponible en este documento.</div>
         <form id="proofForm" class="formGrid">
           <label class="field"><span>Monto que pagaste *</span><input id="paidAmount" type="text" inputmode="decimal" placeholder="0,00" required/></label>
@@ -36,13 +35,13 @@
           <label class="field"><span>Fecha del pago *</span><input id="paidDate" type="date" required/></label>
           <label class="field wide"><span>Referencia / número de operación</span><input id="paidReference" maxlength="120" placeholder="Ej. 00458921"/></label>
           <label class="field wide"><span>Comentario opcional</span><textarea id="paidNote" rows="2" maxlength="300" placeholder="Alguna observación sobre el pago"></textarea></label>
-          <div class="uploadBox"><input id="proofFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required/><label for="proofFile"><strong>Subir voucher o capture</strong><small>JPG, PNG, WEBP o PDF · máximo 8 MB</small></label><div id="fileName" class="fileName"></div></div>
+          <div class="uploadBox"><input id="proofFile" type="file" accept="image/jpeg,image/png,image/webp" required/><label for="proofFile"><strong>Subir voucher o capture</strong><small>JPG, PNG o WEBP · la imagen se comprime automáticamente</small></label><div id="fileName" class="fileName"></div><img id="proofPreview" class="preview" alt="Vista previa del comprobante"/></div>
           <div id="proofMessage" class="proofMessage"></div>
           <button id="submitProof" class="submit" type="submit">Enviar comprobante para revisión</button>
         </form>
       </article>
 
-      <div class="notice"><strong>Importante:</strong> cargar un comprobante no marca automáticamente la factura como pagada. El emisor debe revisar el voucher y confirmar el cobro. Cuando lo registre, ZiviFactura podrá generar el recibo correspondiente.</div>
+      <div class="notice"><strong>Importante:</strong> cargar un comprobante no marca automáticamente la factura como pagada. El emisor debe revisar el voucher y confirmar el cobro. La imagen se comprime antes de enviarse y se guarda junto con el registro del pago en Firestore.</div>
       <p class="footer">Generado con ZiviFactura · <a href="https://zividynamics.com" target="_blank" rel="noreferrer">Zivi Dynamics C.A.</a></p>
     </section>
   </main>
@@ -50,146 +49,76 @@
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js'
   import { initializeAuth, inMemoryPersistence, signInAnonymously } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js'
   import { getFirestore, doc, serverTimestamp, setDoc } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js'
-  import { getStorage, ref, uploadBytes } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-storage.js'
 
-  const firebaseConfig = {
-    apiKey: 'AIzaSyBuuntT-Bpk_-tlKslOG5a2UeqPenCQ6uk',
-    authDomain: 'zivifactura.firebaseapp.com',
-    projectId: 'zivifactura',
-    storageBucket: 'zivifactura.firebasestorage.app',
-    messagingSenderId: '276549383437',
-    appId: '1:276549383437:web:212612caed5710d9ddec44'
-  }
+  const firebaseConfig={apiKey:'AIzaSyBuuntT-Bpk_-tlKslOG5a2UeqPenCQ6uk',authDomain:'zivifactura.firebaseapp.com',projectId:'zivifactura',storageBucket:'zivifactura.firebasestorage.app',messagingSenderId:'276549383437',appId:'1:276549383437:web:212612caed5710d9ddec44'}
+  const $=id=>document.getElementById(id)
+  let data,publicAuth,publicDb,compressedProof=null
 
-  const $ = (id) => document.getElementById(id)
-  let data
-  let publicAuth
-  let publicDb
-  let publicStorage
+  function decodePayload(){let raw=location.hash.slice(1).replace(/-/g,'+').replace(/_/g,'/');while(raw.length%4)raw+='=';const binary=atob(raw);const bytes=Uint8Array.from(binary,ch=>ch.charCodeAt(0));return JSON.parse(new TextDecoder().decode(bytes))}
+  async function copyText(text,button){try{await navigator.clipboard.writeText(text)}catch{const area=document.createElement('textarea');area.value=text;area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();document.execCommand('copy');area.remove()}if(button){const previous=button.textContent;button.textContent='Copiado';button.classList.add('done');setTimeout(()=>{button.textContent=previous;button.classList.remove('done')},1500)}}
+  function row(label,value){const item=document.createElement('div');item.className='row';const text=document.createElement('div'),labelEl=document.createElement('span'),valueEl=document.createElement('strong');labelEl.textContent=label;valueEl.textContent=value;text.append(labelEl,valueEl);const button=document.createElement('button');button.type='button';button.className='copy';button.textContent='Copiar';button.addEventListener('click',()=>copyText(value,button));item.append(text,button);return item}
+  function parseAmount(raw){let value=String(raw||'').trim().replace(/\s/g,'').replace(/[^0-9,.-]/g,'');const comma=value.lastIndexOf(','),dot=value.lastIndexOf('.');if(comma>=0&&dot>=0)value=comma>dot?value.replace(/\./g,'').replace(',','.'):value.replace(/,/g,'');else if(comma>=0)value=value.replace(',','.');const parsed=Number(value);return Number.isFinite(parsed)?parsed:0}
+  function proofMessage(text,ok=false){const box=$('proofMessage');box.textContent=text;box.className=`proofMessage ${ok?'ok':'bad'}`}
+  async function ensurePublicFirebase(){if(publicAuth?.currentUser)return publicAuth.currentUser;const app=initializeApp(firebaseConfig,`proof-${Math.random().toString(36).slice(2)}`);publicAuth=initializeAuth(app,{persistence:inMemoryPersistence});publicDb=getFirestore(app);const credential=await signInAnonymously(publicAuth);return credential.user}
 
-  function decodePayload() {
-    let raw = location.hash.slice(1).replace(/-/g, '+').replace(/_/g, '/')
-    while (raw.length % 4) raw += '='
-    const binary = atob(raw)
-    const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0))
-    return JSON.parse(new TextDecoder().decode(bytes))
-  }
-  async function copyText(text, button) {
-    try { await navigator.clipboard.writeText(text) }
-    catch {
-      const area = document.createElement('textarea'); area.value = text; area.style.position = 'fixed'; area.style.opacity = '0'; document.body.appendChild(area); area.select(); document.execCommand('copy'); area.remove()
+  function loadImage(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=reject;reader.onload=()=>{const image=new Image();image.onerror=reject;image.onload=()=>resolve(image);image.src=String(reader.result)};reader.readAsDataURL(file)})}
+  async function compressImage(file){
+    if(!file.type.startsWith('image/'))throw new Error('Solo se permiten imágenes.')
+    if(file.size>15*1024*1024)throw new Error('La imagen original supera 15 MB.')
+    const image=await loadImage(file)
+    const maxSide=1700,ratio=Math.min(1,maxSide/Math.max(image.naturalWidth,image.naturalHeight))
+    let width=Math.max(1,Math.round(image.naturalWidth*ratio)),height=Math.max(1,Math.round(image.naturalHeight*ratio)),quality=.84,dataUrl=''
+    for(let attempt=0;attempt<7;attempt++){
+      const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height
+      const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);ctx.drawImage(image,0,0,width,height)
+      dataUrl=canvas.toDataURL('image/jpeg',quality)
+      if(dataUrl.length<=620000)break
+      quality=Math.max(.48,quality-.08);width=Math.max(700,Math.round(width*.88));height=Math.max(700,Math.round(height*.88))
     }
-    if (button) { const previous = button.textContent; button.textContent = 'Copiado'; button.classList.add('done'); setTimeout(() => { button.textContent = previous; button.classList.remove('done') }, 1500) }
-  }
-  function row(label, value) {
-    const item = document.createElement('div'); item.className = 'row'
-    const text = document.createElement('div'); const labelEl = document.createElement('span'); labelEl.textContent = label; const valueEl = document.createElement('strong'); valueEl.textContent = value; text.append(labelEl, valueEl)
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'copy'; button.textContent = 'Copiar'; button.addEventListener('click', () => copyText(value, button)); item.append(text, button); return item
-  }
-  function parseAmount(raw) {
-    let value = String(raw || '').trim().replace(/\s/g, '').replace(/[^0-9,.-]/g, '')
-    const comma = value.lastIndexOf(','), dot = value.lastIndexOf('.')
-    if (comma >= 0 && dot >= 0) value = comma > dot ? value.replace(/\./g, '').replace(',', '.') : value.replace(/,/g, '')
-    else if (comma >= 0) value = value.replace(',', '.')
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : 0
-  }
-  function safePart(value) { return String(value || 'factura').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 90) || 'factura' }
-  function proofMessage(text, ok = false) { const box = $('proofMessage'); box.textContent = text; box.className = `proofMessage ${ok ? 'ok' : 'bad'}` }
-
-  async function ensurePublicFirebase() {
-    if (publicAuth?.currentUser) return publicAuth.currentUser
-    const app = initializeApp(firebaseConfig, `proof-${Math.random().toString(36).slice(2)}`)
-    publicAuth = initializeAuth(app, { persistence: inMemoryPersistence })
-    publicDb = getFirestore(app)
-    publicStorage = getStorage(app)
-    const credential = await signInAnonymously(publicAuth)
-    return credential.user
+    if(dataUrl.length>680000)throw new Error('No fue posible reducir esta imagen lo suficiente. Toma un capture más pequeño e inténtalo de nuevo.')
+    return{dataUrl,size:Math.round((dataUrl.length-dataUrl.indexOf(',')-1)*.75),width,height}
   }
 
-  async function submitProof(event) {
-    event.preventDefault()
-    const button = $('submitProof')
-    const file = $('proofFile').files?.[0]
-    const amountPaid = parseAmount($('paidAmount').value)
-    if (!data?.ownerUid) return proofMessage('Esta factura no tiene habilitada la recepción de comprobantes.')
-    if (!amountPaid) return proofMessage('Indica el monto que pagaste.')
-    if (!file) return proofMessage('Selecciona el voucher o capture del pago.')
-    if (file.size > 8 * 1024 * 1024) return proofMessage('El archivo supera el límite de 8 MB.')
-    if (!(file.type.startsWith('image/') || file.type === 'application/pdf')) return proofMessage('Usa una imagen JPG/PNG/WEBP o un PDF.')
+  async function prepareProofFile(file){
+    compressedProof=null;$('proofPreview').style.display='none'
+    if(!file){$('fileName').textContent='';return}
+    try{proofMessage('Comprimiendo el comprobante para enviarlo…',true);compressedProof=await compressImage(file);$('fileName').textContent=`${file.name} · original ${(file.size/1024/1024).toFixed(2)} MB · optimizado ${(compressedProof.size/1024).toFixed(0)} KB`;$('proofPreview').src=compressedProof.dataUrl;$('proofPreview').style.display='block';$('proofMessage').className='proofMessage'}catch(error){$('proofFile').value='';$('fileName').textContent='';proofMessage(error?.message||'No se pudo preparar la imagen.')}
+  }
 
-    button.disabled = true
-    button.textContent = 'Enviando comprobante…'
-    proofMessage('Preparando envío seguro…', true)
-    try {
-      const user = await ensurePublicFirebase()
-      const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-      const path = `paymentProofs/${data.ownerUid}/${safePart(data.invoice)}/${id}-${safePart(file.name)}`
-      await uploadBytes(ref(publicStorage, path), file, { contentType: file.type })
-      await setDoc(doc(publicDb, 'paymentProofs', data.ownerUid, 'submissions', id), {
-        ownerUid: data.ownerUid,
-        submitterUid: user.uid,
-        invoiceNumber: data.invoice || '',
-        clientName: data.client || '',
-        amountPaid,
-        amountCurrency: $('paidCurrency').value,
-        paymentMethod: $('paidMethod').value,
-        paymentDate: $('paidDate').value,
-        reference: $('paidReference').value.trim(),
-        note: $('paidNote').value.trim(),
-        storagePath: path,
-        originalFileName: file.name.slice(0, 180),
-        contentType: file.type,
-        size: file.size,
-        status: 'pending',
-        invoiceCurrency: data.invoiceCurrency || '',
-        invoiceTotal: Number(data.invoiceTotal) || 0,
-        rateValue: Number(data.rateValue) || null,
-        createdAt: serverTimestamp()
+  async function submitProof(event){
+    event.preventDefault();const button=$('submitProof'),file=$('proofFile').files?.[0],amountPaid=parseAmount($('paidAmount').value)
+    if(!data?.ownerUid)return proofMessage('Esta factura no tiene habilitada la recepción de comprobantes.')
+    if(!amountPaid)return proofMessage('Indica el monto que pagaste.')
+    if(!file||!compressedProof)return proofMessage('Selecciona y espera a que se prepare el voucher o capture.')
+    button.disabled=true;button.textContent='Enviando comprobante…';proofMessage('Enviando imagen optimizada de forma segura…',true)
+    try{
+      const user=await ensurePublicFirebase(),id=crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`
+      await setDoc(doc(publicDb,'paymentProofs',data.ownerUid,'submissions',id),{
+        ownerUid:data.ownerUid,submitterUid:user.uid,invoiceNumber:data.invoice||'',clientName:data.client||'',amountPaid,
+        amountCurrency:$('paidCurrency').value,paymentMethod:$('paidMethod').value,paymentDate:$('paidDate').value,
+        reference:$('paidReference').value.trim(),note:$('paidNote').value.trim(),imageData:compressedProof.dataUrl,
+        storagePath:`firestore-inline:${data.ownerUid}:${id}`,originalFileName:file.name.slice(0,180),contentType:'image/jpeg',
+        size:compressedProof.size,originalSize:file.size,status:'pending',invoiceCurrency:data.invoiceCurrency||'',invoiceTotal:Number(data.invoiceTotal)||0,
+        rateValue:Number(data.rateValue)||null,createdAt:serverTimestamp()
       })
-      proofMessage('Comprobante enviado correctamente. El emisor lo recibirá en ZiviFactura para revisarlo y registrar tu pago.', true)
-      $('proofForm').reset()
-      $('paidDate').value = new Date().toISOString().slice(0,10)
-      $('fileName').textContent = ''
-    } catch (error) {
-      console.error(error)
-      const code = error?.code || ''
-      if (code.includes('operation-not-allowed')) proofMessage('La recepción de comprobantes todavía no está habilitada por el emisor.')
-      else if (code.includes('storage/unauthorized') || code.includes('permission-denied')) proofMessage('No fue posible guardar el comprobante. El emisor debe terminar la configuración de recepción de pagos.')
-      else proofMessage('No se pudo enviar el comprobante. Revisa tu conexión e inténtalo nuevamente.')
-    } finally {
-      button.disabled = false
-      button.textContent = 'Enviar comprobante para revisión'
-    }
+      proofMessage('Comprobante enviado correctamente. El emisor lo recibirá en ZiviFactura para revisarlo y registrar tu pago.',true)
+      $('proofForm').reset();$('paidDate').value=new Date().toISOString().slice(0,10);$('fileName').textContent='';$('proofPreview').style.display='none';compressedProof=null
+    }catch(error){console.error(error);const code=error?.code||'';if(code.includes('operation-not-allowed'))proofMessage('La recepción de comprobantes todavía no está habilitada. El emisor debe activar el acceso anónimo en Firebase Authentication.');else if(code.includes('permission-denied'))proofMessage('No fue posible guardar el comprobante. El emisor debe publicar las reglas de Firestore de ZiviFactura.');else proofMessage('No se pudo enviar el comprobante. Revisa tu conexión e inténtalo nuevamente.')}finally{button.disabled=false;button.textContent='Enviar comprobante para revisión'}
   }
 
-  try {
-    data = decodePayload(); if (!data || data.version !== 1) throw new Error('invalid')
-    $('invoice').textContent = data.invoice || 'Factura'; $('meta').textContent = [data.company, data.client].filter(Boolean).join(' · '); $('total').textContent = data.total || ''
-    const allLines = [data.company, data.invoice, data.client ? `Cliente: ${data.client}` : '', data.total ? `Total: ${data.total}` : ''].filter(Boolean)
-    if (data.rate || (data.equivalents && data.equivalents.length)) {
-      $('rateCard').hidden = false
-      if (data.rate) { $('rateRows').appendChild(row(data.rate.label || 'Tasa aplicada', data.rate.value || '')); allLines.push(`${data.rate.label || 'Tasa aplicada'}: ${data.rate.value || ''}`) }
-      ;(data.equivalents || []).forEach(item => { $('rateRows').appendChild(row(item.label, item.value)); allLines.push(`${item.label}: ${item.value}`) })
-    }
-    if (data.groups && data.groups.length) {
-      $('paymentCard').hidden = false
-      data.groups.forEach(group => {
-        const section = document.createElement('section'); section.className = 'group'; const title = document.createElement('h4'); title.textContent = group.title; const rows = document.createElement('div'); rows.className = 'rows'; allLines.push('', group.title.toUpperCase())
-        ;(group.rows || []).forEach(item => { rows.appendChild(row(item.label, item.value)); allLines.push(`${item.label}: ${item.value}`) }); section.append(title, rows); $('paymentGroups').appendChild(section)
-      })
-    }
-    $('copyAll').addEventListener('click', event => copyText(allLines.join('\n'), event.currentTarget))
-    const currencies = [...new Set(['VES', data.invoiceCurrency || 'USD', 'USD', 'EUR', 'USDT'].filter(Boolean))]
-    $('paidCurrency').innerHTML = currencies.map(value => `<option value="${value}">${value}</option>`).join('')
-    $('paidCurrency').value = 'VES'
-    $('paidDate').value = new Date().toISOString().slice(0,10)
-    if (data.expectedVes) $('paidAmount').value = String(Number(data.expectedVes).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
-    $('proofFile').addEventListener('change', () => { const file = $('proofFile').files?.[0]; $('fileName').textContent = file ? `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB` : '' })
-    if (!data.ownerUid) { $('proofDisabled').hidden = false; $('proofForm').hidden = true }
-    else $('proofForm').addEventListener('submit', submitProof)
-    $('content').hidden = false
-  } catch { $('error').style.display = 'block' }
+  try{
+    data=decodePayload();if(!data||data.version!==1)throw new Error('invalid')
+    $('invoice').textContent=data.invoice||'Factura';$('meta').textContent=[data.company,data.client].filter(Boolean).join(' · ');$('total').textContent=data.total||''
+    const allLines=[data.company,data.invoice,data.client?`Cliente: ${data.client}`:'',data.total?`Total: ${data.total}`:''].filter(Boolean)
+    if(data.rate||(data.equivalents&&data.equivalents.length)){$('rateCard').hidden=false;if(data.rate){$('rateRows').appendChild(row(data.rate.label||'Tasa aplicada',data.rate.value||''));allLines.push(`${data.rate.label||'Tasa aplicada'}: ${data.rate.value||''}`)};(data.equivalents||[]).forEach(item=>{$('rateRows').appendChild(row(item.label,item.value));allLines.push(`${item.label}: ${item.value}`)})}
+    if(data.groups&&data.groups.length){$('paymentCard').hidden=false;data.groups.forEach(group=>{const section=document.createElement('section');section.className='group';const title=document.createElement('h4');title.textContent=group.title;const rows=document.createElement('div');rows.className='rows';allLines.push('',group.title.toUpperCase());(group.rows||[]).forEach(item=>{rows.appendChild(row(item.label,item.value));allLines.push(`${item.label}: ${item.value}`)});section.append(title,rows);$('paymentGroups').appendChild(section)})}
+    $('copyAll').addEventListener('click',event=>copyText(allLines.join('\n'),event.currentTarget))
+    const currencies=[...new Set(['VES',data.invoiceCurrency||'USD','USD','EUR','USDT'].filter(Boolean))];$('paidCurrency').innerHTML=currencies.map(value=>`<option value="${value}">${value}</option>`).join('');$('paidCurrency').value='VES';$('paidDate').value=new Date().toISOString().slice(0,10)
+    if(data.expectedVes)$('paidAmount').value=String(Number(data.expectedVes).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2}))
+    $('proofFile').addEventListener('change',()=>void prepareProofFile($('proofFile').files?.[0]))
+    if(!data.ownerUid){$('proofDisabled').hidden=false;$('proofForm').hidden=true}else $('proofForm').addEventListener('submit',submitProof)
+    $('content').hidden=false
+  }catch{$('error').style.display='block'}
 </script>
 </body>
 </html>
