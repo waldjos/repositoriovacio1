@@ -23,6 +23,21 @@ const statusLabel = (status: Invoice['status']) => ({ draft: 'BORRADOR', issued:
 const plain = (value?: number, suffix = '') => Number.isFinite(value) ? `${Number(value).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${suffix}` : 'N/D'
 const ALL_CONVERSIONS: ConversionTarget[] = ['VES', 'USD', 'EUR', 'USDT_BINANCE', 'USDT_AVERAGE']
 
+type CopyRow = { label: string; value: string }
+type CopyGroup = { title: string; rows: CopyRow[] }
+
+function encodeCopyPayload(payload: unknown) {
+  const bytes = new TextEncoder().encode(JSON.stringify(payload))
+  let binary = ''
+  bytes.forEach(byte => { binary += String.fromCharCode(byte) })
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function copyPageUrl(payload: unknown) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zivi-factura.vercel.app'
+  return `${origin}/copiar.html#${encodeCopyPayload(payload)}`
+}
+
 function availablePaymentMethods(company: Company): PaymentDisplay[] {
   const methods: PaymentDisplay[] = []
   if (company.mobilePaymentBank || company.mobilePaymentPhone || company.mobilePaymentId) methods.push('mobile')
@@ -239,10 +254,62 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
     showBinance ? { title: 'BINANCE / DIGITAL', lines: [company.binanceId && `Pay ID / correo: ${company.binanceId}`].filter(Boolean) as string[] } : null,
   ].filter((item): item is { title: string; lines: string[] } => Boolean(item))
   const hasPaymentData = columns.length > 0 || showNotes
+  const copyGroups: CopyGroup[] = [
+    showMobile ? {
+      title: 'Pago móvil',
+      rows: [
+        company.mobilePaymentBank ? { label: 'Banco', value: company.mobilePaymentBank } : null,
+        company.mobilePaymentPhone ? { label: 'Teléfono', value: company.mobilePaymentPhone } : null,
+        company.mobilePaymentId ? { label: 'C.I./RIF', value: company.mobilePaymentId } : null,
+      ].filter((item): item is CopyRow => Boolean(item)),
+    } : null,
+    showBank ? {
+      title: 'Cuenta bancaria',
+      rows: [
+        company.bankName ? { label: 'Banco', value: company.bankName } : null,
+        company.bankAccountType ? { label: 'Tipo de cuenta', value: company.bankAccountType } : null,
+        company.bankAccountNumber ? { label: 'Número de cuenta', value: company.bankAccountNumber } : null,
+        company.bankAccountHolder ? { label: 'Titular', value: company.bankAccountHolder } : null,
+      ].filter((item): item is CopyRow => Boolean(item)),
+    } : null,
+    showBinance ? {
+      title: 'Binance / digital',
+      rows: company.binanceId ? [{ label: 'Pay ID / correo', value: company.binanceId }] : [],
+    } : null,
+    showNotes && company.paymentNotes ? {
+      title: 'Instrucciones adicionales',
+      rows: [{ label: 'Instrucciones', value: company.paymentNotes }],
+    } : null,
+  ].filter((item): item is CopyGroup => Boolean(item))
+
+  const selectedCopyTargets = invoice.conversionTargets !== undefined
+    ? invoice.conversionTargets
+    : invoice.showRateConversions ? ALL_CONVERSIONS : ['VES']
+  const copyEquivalents: CopyRow[] = equivalents ? [
+    selectedCopyTargets.includes('VES') ? { label: 'Bolívares', value: money(equivalents.ves, 'VES') } : null,
+    selectedCopyTargets.includes('USD') && equivalents.USD != null ? { label: 'USD BCV', value: money(equivalents.USD, 'USD') } : null,
+    selectedCopyTargets.includes('EUR') && equivalents.EUR != null ? { label: 'EUR BCV', value: money(equivalents.EUR, 'EUR') } : null,
+    selectedCopyTargets.includes('USDT_BINANCE') && equivalents.USDT_BINANCE != null ? { label: 'USDT Binance', value: `${plain(equivalents.USDT_BINANCE)} USDT` } : null,
+    selectedCopyTargets.includes('USDT_AVERAGE') && equivalents.USDT_AVERAGE != null ? { label: 'USDT promedio', value: `${plain(equivalents.USDT_AVERAGE)} USDT` } : null,
+  ].filter((item): item is CopyRow => Boolean(item)) : []
+
+  const copyUrl = hasPaymentData ? copyPageUrl({
+    version: 1,
+    company: company.name || 'Empresa',
+    invoice: invoice.number,
+    client: invoice.client.name || 'Cliente',
+    total: money(total, invoice.currency),
+    rate: invoice.rateValue ? {
+      label: invoice.rateLabel || 'Tasa aplicada',
+      value: `${plain(invoice.rateValue)} Bs`,
+    } : undefined,
+    equivalents: copyEquivalents,
+    groups: copyGroups,
+  }) : ''
 
   if (hasPaymentData && nextBlockY < 680) {
     const paymentY = nextBlockY
-    const paymentH = showNotes ? (columns.length ? 118 : 82) : 94
+    const paymentH = (showNotes ? (columns.length ? 118 : 82) : 94) + 18
     doc.setFillColor(248, 250, 255)
     doc.roundedRect(28, paymentY, 539, paymentH, 12, 12, 'F')
     doc.setFillColor(...navy)
@@ -251,6 +318,18 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.text('DATOS PARA PAGAR', 44, paymentY + 20)
+
+    const copyButtonX = 430
+    const copyButtonY = paymentY + 8
+    const copyButtonW = 121
+    const copyButtonH = 22
+    doc.setFillColor(...blue)
+    doc.roundedRect(copyButtonX, copyButtonY, copyButtonW, copyButtonH, 7, 7, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(7.2)
+    doc.text('ABRIR Y COPIAR DATOS', copyButtonX + copyButtonW / 2, copyButtonY + 14.5, { align: 'center' })
+    doc.link(copyButtonX, copyButtonY, copyButtonW, copyButtonH, { url: copyUrl })
 
     if (columns.length) {
       const contentWidth = 507
@@ -267,6 +346,10 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
       if (columns.length) { doc.setDrawColor(...line); doc.line(44, noteY, 551, noteY) }
       doc.setFont('helvetica', 'normal'); doc.setFontSize(7.3); doc.setTextColor(...muted); doc.text(doc.splitTextToSize(company.paymentNotes, 500), 44, noteY + 15)
     }
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6.8)
+    doc.setTextColor(...muted)
+    doc.text("Puedes seleccionar el texto del PDF o tocar 'Abrir y copiar datos' para copiar cada dato con un boton.", 44, paymentY + paymentH - 8)
   }
 
   doc.setDrawColor(...line)
