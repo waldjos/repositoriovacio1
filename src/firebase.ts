@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from 'firebase/app'
 import { browserLocalPersistence, createUserWithEmailAndPassword, getAuth, GoogleAuthProvider, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail, setPersistence, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, updateProfile, type User } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
+import { getStorage } from 'firebase/storage'
 
 // Firebase Web config is safe to ship in the client. Environment variables still
 // take precedence so the deployment can override these values without code changes.
@@ -26,6 +27,7 @@ const firebaseApp = firebaseConfigured
 
 export const firebaseAuth = firebaseApp ? getAuth(firebaseApp) : null
 export const firestore = firebaseApp ? getFirestore(firebaseApp) : null
+export const firebaseStorage = firebaseApp ? getStorage(firebaseApp) : null
 
 if (firebaseAuth) {
   setPersistence(firebaseAuth, browserLocalPersistence).catch(() => undefined)
