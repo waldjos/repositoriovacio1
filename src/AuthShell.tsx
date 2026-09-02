@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, CheckCircle2, Cloud, CloudOff, LogOut, ReceiptText, ShieldCheck, Wallet } from 'lucide-react'
+import { BarChart3, CheckCircle2, Cloud, CloudOff, LogOut, ReceiptText, ShieldCheck, Wallet, WalletCards } from 'lucide-react'
 import AdminDashboard from './AdminDashboard'
 import App from './App'
+import PaymentsView from './PaymentsView'
 import { db, ensureCompany } from './db'
 import { firebaseConfigured, observeAuth, signInWithGoogle, signOutFirebase, type FirebaseUser } from './firebase'
 import { startFirebaseSync, syncFirebaseNow, type SyncState } from './firebaseSync'
@@ -9,17 +10,18 @@ import './auth.css'
 import './admin.css'
 
 const LOCAL_UID_KEY = 'zivifactura.firebase.uid'
-type Workspace = 'billing' | 'income' | 'stats'
+type Workspace = 'billing' | 'payments' | 'income' | 'stats'
 
 async function prepareLocalAccount(uid: string) {
   const previousUid = localStorage.getItem(LOCAL_UID_KEY)
   if (previousUid && previousUid !== uid) {
-    await db.transaction('rw', db.company, db.clients, db.products, db.invoices, async () => {
+    await db.transaction('rw', db.company, db.clients, db.products, db.invoices, db.payments, async () => {
       await Promise.all([
         db.company.clear(),
         db.clients.clear(),
         db.products.clear(),
         db.invoices.clear(),
+        db.payments.clear(),
       ])
     })
     await ensureCompany()
@@ -65,7 +67,7 @@ function LoginScreen({ onLocal }: { onLocal: () => void }) {
         <p>La aplicación seguirá trabajando localmente cuando no tengas conexión y sincronizará con Firebase cuando vuelvas a estar en línea.</p>
       </div>
       <div className="authBenefits">
-        <div><Cloud size={19}/><span><strong>Respaldo en Firestore</strong><small>Facturas, clientes, productos y configuración.</small></span></div>
+        <div><Cloud size={19}/><span><strong>Respaldo en Firestore</strong><small>Facturas, cobros, clientes, productos y configuración.</small></span></div>
         <div><ShieldCheck size={19}/><span><strong>Datos separados por usuario</strong><small>Cada cuenta de Google accede únicamente a su información.</small></span></div>
         <div><CheckCircle2 size={19}/><span><strong>Local-first</strong><small>Si falla internet, puedes seguir facturando.</small></span></div>
       </div>
@@ -95,10 +97,11 @@ function WorkspaceShell() {
   return <>
     <nav className="workspaceNav" aria-label="Áreas administrativas">
       <button className={workspace === 'billing' ? 'active' : ''} onClick={() => setWorkspace('billing')}><ReceiptText size={17}/>Facturación</button>
+      <button className={workspace === 'payments' ? 'active' : ''} onClick={() => setWorkspace('payments')}><WalletCards size={17}/>Cobros / Caja</button>
       <button className={workspace === 'income' ? 'active' : ''} onClick={() => setWorkspace('income')}><Wallet size={17}/>Ingresos</button>
       <button className={workspace === 'stats' ? 'active' : ''} onClick={() => setWorkspace('stats')}><BarChart3 size={17}/>Estadísticas</button>
     </nav>
-    {workspace === 'billing' ? <App/> : <AdminDashboard view={workspace}/>} 
+    {workspace === 'billing' ? <App/> : workspace === 'payments' ? <PaymentsView/> : <AdminDashboard view={workspace}/>} 
   </>
 }
 
