@@ -1,5 +1,5 @@
 import { getApps, initializeApp } from 'firebase/app'
-import { browserLocalPersistence, createUserWithEmailAndPassword, getAuth, GoogleAuthProvider, onAuthStateChanged, sendPasswordResetEmail, setPersistence, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, updateProfile, type User } from 'firebase/auth'
+import { browserLocalPersistence, createUserWithEmailAndPassword, getAuth, GoogleAuthProvider, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail, setPersistence, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, updateProfile, type User } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
 // Firebase Web config is safe to ship in the client. Environment variables still
@@ -68,9 +68,27 @@ export async function createEmailAccount(name: string, email: string, password: 
   return credential
 }
 
+export function isPasswordAccount(user: User) {
+  return user.providerData.some(provider => provider.providerId === 'password')
+}
+
+export async function sendAccountVerification(user?: User | null) {
+  const target = user || firebaseAuth?.currentUser
+  if (!target) throw new Error('No hay una cuenta activa para verificar.')
+  if (target.emailVerified || !isPasswordAccount(target)) return
+  await sendEmailVerification(target, { url: `${window.location.origin}/` })
+}
+
+export async function refreshAccountVerification(user?: User | null) {
+  const target = user || firebaseAuth?.currentUser
+  if (!target) return false
+  await reload(target)
+  return target.emailVerified
+}
+
 export async function requestPasswordReset(email: string) {
   if (!firebaseAuth) throw new Error('Firebase todavía no está configurado.')
-  await sendPasswordResetEmail(firebaseAuth, email.trim().toLowerCase())
+  await sendPasswordResetEmail(firebaseAuth, email.trim().toLowerCase(), { url: `${window.location.origin}/` })
 }
 
 export async function signOutFirebase() {
