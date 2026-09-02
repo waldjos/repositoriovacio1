@@ -1,5 +1,5 @@
 import { getApps, initializeApp } from 'firebase/app'
-import { browserLocalPersistence, getAuth, GoogleAuthProvider, onAuthStateChanged, setPersistence, signInWithPopup, signInWithRedirect, signOut, type User } from 'firebase/auth'
+import { browserLocalPersistence, createUserWithEmailAndPassword, getAuth, GoogleAuthProvider, onAuthStateChanged, sendPasswordResetEmail, setPersistence, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, updateProfile, type User } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
 // Firebase Web config is safe to ship in the client. Environment variables still
@@ -54,6 +54,23 @@ export async function signInWithGoogle() {
     }
     throw error
   }
+}
+
+export async function signInWithEmail(email: string, password: string) {
+  if (!firebaseAuth) throw new Error('Firebase todavía no está configurado.')
+  return signInWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password)
+}
+
+export async function createEmailAccount(name: string, email: string, password: string) {
+  if (!firebaseAuth) throw new Error('Firebase todavía no está configurado.')
+  const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim().toLowerCase(), password)
+  if (name.trim()) await updateProfile(credential.user, { displayName: name.trim() })
+  return credential
+}
+
+export async function requestPasswordReset(email: string) {
+  if (!firebaseAuth) throw new Error('Firebase todavía no está configurado.')
+  await sendPasswordResetEmail(firebaseAuth, email.trim().toLowerCase())
 }
 
 export async function signOutFirebase() {
