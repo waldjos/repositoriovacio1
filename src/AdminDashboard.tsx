@@ -8,7 +8,7 @@ import type { Invoice, Payment, PaymentMethodKey, RateSnapshot } from './types'
 import './admin.css'
 
 type AdminView = 'income' | 'stats'
-type Period = 'month' | '30d' | 'year' | 'all'
+type Period = 'today' | 'month' | '30d' | 'year' | 'all'
 
 type CashMovement = {
   key: string
@@ -30,6 +30,7 @@ function inPeriod(dateRaw: string, period: Period) {
   if (period === 'all') return true
   const date = recordDate(dateRaw)
   const now = new Date()
+  if (period === 'today') return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
   if (period === 'month') return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()
   if (period === 'year') return date.getFullYear() === now.getFullYear()
   const limit = new Date(now)
@@ -61,7 +62,7 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [rates, setRates] = useState<RateSnapshot | null>(getCachedRates())
-  const [period, setPeriod] = useState<Period>('month')
+  const [period, setPeriod] = useState<Period>('today')
   const [loading, setLoading] = useState(false)
 
   async function load(forceRates = false) {
@@ -81,6 +82,8 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
   }
 
   useEffect(() => { void load(false) }, [])
+
+  const invoiceMap = useMemo(() => new Map(invoices.map(invoice => [invoice.number, invoice])), [invoices])
 
   const allMovements = useMemo<CashMovement[]>(() => {
     const actual: CashMovement[] = payments.map(payment => ({
@@ -161,6 +164,12 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
     return sum + (rate ? balance * rate : 0)
   }, 0), [invoices, payments, rates])
 
+  const movementHistory = useMemo(() => movements.slice().sort((a, b) => {
+    const byDate = Date.parse(`${b.date}T12:00:00`) - Date.parse(`${a.date}T12:00:00`)
+    if (byDate) return byDate
+    return b.key.localeCompare(a.key)
+  }), [movements])
+
   const maxTrend = Math.max(...trend.map(item => item.value), 1)
   const originalTotals = [...summary.original.entries()].map(([currency, value]) => money(value, currency)).join(' · ') || '0,00'
   const average = movements.length ? summary.totalVes / movements.length : 0
@@ -168,12 +177,13 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
 
   return <main className="adminPage">
     <section className="adminHero">
-      <div><span>ZIVIFACTURA · ADMINISTRACIÓN</span><h1>{view === 'income' ? 'Ingresos y equivalentes' : 'Estadísticas de cobro'}</h1><p>{view === 'income' ? 'Los ingresos se calculan desde cada cobro o abono registrado, usando la fecha y la tasa real de ese movimiento.' : 'Analiza cuántos pagos recibiste por cada método y cuánto representaron en bolívares.'}</p></div>
+      <div><span>ZIVIFACTURA · ADMINISTRACIÓN</span><h1>{view === 'income' ? 'Ingresos y equivalentes' : 'Estadísticas de cobro'}</h1><p>{view === 'income' ? 'Los ingresos se calculan desde cada cobro o abono registrado, usando la fecha y la tasa real de ese movimiento. Cada abono también reduce automáticamente la cuenta por cobrar de su factura.' : 'Analiza cuántos pagos recibiste por cada método y cuánto representaron en bolívares.'}</p></div>
       <button className="secondary" disabled={loading} onClick={() => void load(true)}><RefreshCw size={17} className={loading ? 'spin' : ''}/>{loading ? 'Actualizando…' : 'Actualizar datos'}</button>
     </section>
 
     <section className="adminFilters">
       <div className="periodTabs" aria-label="Período">
+        <button className={period === 'today' ? 'active' : ''} onClick={() => setPeriod('today')}>Hoy</button>
         <button className={period === 'month' ? 'active' : ''} onClick={() => setPeriod('month')}>Este mes</button>
         <button className={period === '30d' ? 'active' : ''} onClick={() => setPeriod('30d')}>Últimos 30 días</button>
         <button className={period === 'year' ? 'active' : ''} onClick={() => setPeriod('year')}>Este año</button>
@@ -184,7 +194,7 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
 
     {view === 'income' ? <>
       <section className="incomePrimary">
-        <article className="incomeMainCard"><div className="adminIcon"><CircleDollarSign/></div><span>INGRESOS REGISTRADOS · BASE BS</span><strong>{money(summary.totalVes, 'VES')}</strong><small>{movements.length} movimiento{movements.length === 1 ? '' : 's'} de caja · Original: {originalTotals}</small></article>
+        <article className="incomeMainCard"><div className="adminIcon"><CircleDollarSign/></div><span>{period === 'today' ? 'INGRESOS DE HOY · BASE BS' : 'INGRESOS REGISTRADOS · BASE BS'}</span><strong>{money(summary.totalVes, 'VES')}</strong><small>{movements.length} movimiento{movements.length === 1 ? '' : 's'} de caja · Original: {originalTotals}</small></article>
         <div className="incomeEquivalents">
           <article><span>USD · BCV</span><strong>{summary.equivalents.USD != null ? money(summary.equivalents.USD, 'USD') : 'N/D'}</strong></article>
           <article><span>EUR · BCV</span><strong>{summary.equivalents.EUR != null ? money(summary.equivalents.EUR, 'EUR') : 'N/D'}</strong></article>
@@ -195,12 +205,26 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
 
       <section className="statsMetrics adminIncomeMetrics">
         <article><WalletCards/><span>Movimientos del período</span><strong>{movements.length}</strong></article>
-        <article><CircleDollarSign/><span>Por cobrar aprox.</span><strong>{money(outstandingVes, 'VES')}</strong></article>
+        <article><CircleDollarSign/><span>Por cobrar después de abonos</span><strong>{money(outstandingVes, 'VES')}</strong></article>
         <article><Calculator/><span>Facturas parciales</span><strong>{partialCount}</strong></article>
       </section>
 
+      <section className="card adminCard cashHistoryCard">
+        <div className="adminCardHead"><div><span>HISTORIAL DE TRANSACCIONES</span><h2>Cobros y abonos del período</h2><p>Cada movimiento aumenta los ingresos de Caja y, al mismo tiempo, disminuye el saldo pendiente de la factura asociada.</p></div><WalletCards size={22}/></div>
+        {movementHistory.length ? <div className="cashHistoryList">{movementHistory.map(movement => {
+          const invoice = invoiceMap.get(movement.invoiceNumber)
+          const client = invoice?.client.name || 'Cliente'
+          const currentBalance = invoice ? balanceForInvoice(invoice, payments) : 0
+          return <article key={movement.key}>
+            <div className="cashHistoryMain"><strong>{client}</strong><span>{movement.invoiceNumber} · {movement.date} · {paymentMethodLabels[movement.method]}</span>{movement.legacy && <small>Registro histórico sin movimiento individual de Caja</small>}</div>
+            <div className="cashHistoryPaid"><span>{movement.legacy ? 'Cobrado' : 'Abono recibido'}</span><strong>{money(movement.amount, movement.currency)}</strong><small>{money(movement.ves, 'VES')} equivalente</small></div>
+            <div className="cashHistoryBalance"><span>Saldo actual factura</span><strong>{invoice ? money(currentBalance, invoice.currency) : 'N/D'}</strong><small>{currentBalance <= 0.005 ? 'Factura pagada' : 'Pendiente por cobrar'}</small></div>
+          </article>
+        })}</div> : <div className="adminEmpty">No hay cobros ni abonos registrados en este período.</div>}
+      </section>
+
       <section className="adminGrid">
-        <article className="card adminCard"><div className="adminCardHead"><div><span>CONTROL DE CAJA</span><h2>Calidad del registro</h2></div><Calculator size={22}/></div><div className="adminRows"><div><span>Ticket promedio por movimiento</span><strong>{money(average, 'VES')}</strong></div><div><span>Movimientos históricos heredados</span><strong>{summary.legacyCount}</strong></div><div><span>Facturas con saldo parcial</span><strong>{partialCount}</strong></div><div><span>Saldo por cobrar aproximado</span><strong>{money(outstandingVes, 'VES')}</strong></div></div><p className="adminNote">Las facturas antiguas marcadas como pagadas y sin movimientos de caja se conservan como registros históricos. Los nuevos reportes usan los cobros y abonos reales.</p></article>
+        <article className="card adminCard"><div className="adminCardHead"><div><span>CONTROL DE CAJA</span><h2>Calidad del registro</h2></div><Calculator size={22}/></div><div className="adminRows"><div><span>Ticket promedio por movimiento</span><strong>{money(average, 'VES')}</strong></div><div><span>Movimientos históricos heredados</span><strong>{summary.legacyCount}</strong></div><div><span>Facturas con saldo parcial</span><strong>{partialCount}</strong></div><div><span>Saldo por cobrar después de abonos</span><strong>{money(outstandingVes, 'VES')}</strong></div></div><p className="adminNote">Las facturas antiguas marcadas como pagadas y sin movimientos de caja se conservan como registros históricos. Los nuevos reportes usan los cobros y abonos reales.</p></article>
         <article className="card adminCard"><div className="adminCardHead"><div><span>ÚLTIMOS 6 MESES</span><h2>Tendencia de ingresos</h2></div><BarChart3 size={22}/></div><div className="trendList">{trend.map(item => <div className="trendRow" key={item.key}><span>{item.label}</span><div><i style={{ width: `${Math.max(item.value ? 4 : 0, (item.value / maxTrend) * 100)}%` }}/></div><strong>{money(item.value, 'VES')}</strong></div>)}</div></article>
       </section>
     </> : <>
