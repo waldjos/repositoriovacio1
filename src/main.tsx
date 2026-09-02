@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App'
+import AuthShell from './AuthShell'
 import { initAutomaticBackup } from './cloudBackup'
 import './styles.css'
 
@@ -8,7 +8,7 @@ initAutomaticBackup()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <AuthShell />
   </React.StrictMode>,
 )
 
