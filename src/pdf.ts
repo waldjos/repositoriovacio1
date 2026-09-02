@@ -35,7 +35,9 @@ function encodeCopyPayload(payload: unknown) {
 
 function copyPageUrl(payload: unknown) {
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://zivi-factura.vercel.app'
-  return `${origin}/copiar.html#${encodeCopyPayload(payload)}`
+  const ownerUid = typeof window !== 'undefined' ? localStorage.getItem('zivifactura.firebase.uid') || undefined : undefined
+  const enriched = payload && typeof payload === 'object' ? { ...(payload as Record<string, unknown>), ownerUid } : payload
+  return `${origin}/copiar.html#${encodeCopyPayload(enriched)}`
 }
 
 function availablePaymentMethods(company: Company): PaymentDisplay[] {
