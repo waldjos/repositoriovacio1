@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, CircleDollarSign, Plus, ReceiptText, Trash2, WalletCards } from 'lucide-react'
+import { CheckCircle2, CircleDollarSign, Download, Plus, ReceiptText, Trash2, WalletCards } from 'lucide-react'
 import { db } from './db'
 import { money, totals } from './pdf'
 import { fetchLiveRates, getCachedRates, refreshRatesIfDue } from './rates'
 import { appliedForInvoice, balanceForInvoice, paymentAmountVes, paymentKey, paymentMethodLabels, paymentMethodOptions, reconcileInvoiceStatus, suggestedPaymentRate } from './payments'
-import type { Invoice, Payment, PaymentMethodKey, RateSnapshot } from './types'
+import { downloadPaymentReceipt, type ReceiptBalances } from './receipt'
+import type { Company, Invoice, Payment, PaymentMethodKey, RateSnapshot } from './types'
 import './admin.css'
 
 type PaymentDraft = {
@@ -32,19 +33,22 @@ const displayNumber = (value: number) => value.toLocaleString('es-VE', { minimum
 export default function PaymentsView() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
+  const [company, setCompany] = useState<Company | null>(null)
   const [rates, setRates] = useState<RateSnapshot | null>(getCachedRates())
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [draft, setDraft] = useState<PaymentDraft>({ invoiceNumber: '', amount: '', method: 'mobile', date: today(), rate: '', reference: '', notes: '' })
 
   async function load(forceRates = false) {
-    const [invoiceRows, paymentRows, nextRates] = await Promise.all([
+    const [invoiceRows, paymentRows, companyRow, nextRates] = await Promise.all([
       db.invoices.orderBy('updatedAt').reverse().toArray(),
       db.payments.orderBy('date').reverse().toArray(),
+      db.company.get(1),
       forceRates ? fetchLiveRates(true).catch(() => getCachedRates()) : refreshRatesIfDue(),
     ])
     setInvoices(invoiceRows)
     setPayments(paymentRows)
+    setCompany(companyRow || null)
     if (nextRates) setRates(nextRates)
   }
 
@@ -74,6 +78,28 @@ export default function PaymentsView() {
     setDraft(current => ({ ...current, method, rate: nextRate ? String(nextRate) : current.rate }))
   }
 
+  function balancesForReceipt(payment: Payment, invoice: Invoice): ReceiptBalances {
+    const total = totals(invoice).total
+    const ordered = payments
+      .filter(item => item.invoiceNumber === invoice.number)
+      .slice()
+      .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+    let appliedBefore = 0
+    for (const item of ordered) {
+      if (item.key === payment.key) break
+      appliedBefore += Number(item.amountApplied) || 0
+    }
+    const before = Math.max(0, total - appliedBefore)
+    return { before, after: Math.max(0, before - (Number(payment.amountApplied) || 0)) }
+  }
+
+  function downloadReceipt(payment: Payment) {
+    const invoice = invoices.find(item => item.number === payment.invoiceNumber)
+    if (!invoice || !company) return setMessage('No se pudo preparar el recibo porque faltan datos de la empresa o de la factura.')
+    downloadPaymentReceipt(payment, invoice, company, balancesForReceipt(payment, invoice))
+    setMessage('Recibo de pago generado nuevamente.')
+  }
+
   async function registerPayment() {
     if (!selected) return setMessage('Selecciona una factura.')
     if (amountNumber <= 0) return setMessage('Escribe un monto válido.')
@@ -100,7 +126,10 @@ export default function PaymentsView() {
       }
       await db.payments.add(payment)
       await reconcileInvoiceStatus(selected)
-      setMessage(amountNumber + 0.005 >= balance ? 'Cobro completo registrado. La factura quedó pagada.' : 'Abono registrado. La factura mantiene saldo pendiente.')
+      const receiptBalances = { before: balance, after: Math.max(0, balance - amountNumber) }
+      if (company) downloadPaymentReceipt(payment, selected, company, receiptBalances)
+      const baseMessage = amountNumber + 0.005 >= balance ? 'Cobro completo registrado. La factura quedó pagada.' : 'Abono registrado. La factura mantiene saldo pendiente.'
+      setMessage(company ? `${baseMessage} Se generó automáticamente el recibo PDF.` : baseMessage)
       setDraft({ invoiceNumber: '', amount: '', method: 'mobile', date: today(), rate: '', reference: '', notes: '' })
       await load(false)
     } finally {
@@ -125,7 +154,7 @@ export default function PaymentsView() {
 
   return <main className="adminPage">
     <section className="adminHero paymentsHero">
-      <div><span>ZIVIFACTURA · CAJA</span><h1>Cobros, abonos y saldos</h1><p>Registra cada ingreso por separado. Una factura puede recibir varios pagos, en fechas y métodos distintos, hasta completar su saldo.</p></div>
+      <div><span>ZIVIFACTURA · CAJA</span><h1>Cobros, abonos y saldos</h1><p>Registra cada ingreso por separado. Una factura puede recibir varios pagos, en fechas y métodos distintos, hasta completar su saldo. Cada movimiento genera su recibo PDF.</p></div>
       <button className="secondary" onClick={() => void load(true)}>Actualizar tasas</button>
     </section>
 
@@ -137,7 +166,7 @@ export default function PaymentsView() {
 
     <section className="paymentsLayout">
       <section className="card paymentFormCard">
-        <div className="adminCardHead"><div><span>NUEVO MOVIMIENTO</span><h2>Registrar cobro o abono</h2><p>El monto se aplica al saldo en la moneda de la factura. La tasa queda congelada en este movimiento.</p></div><Plus size={24}/></div>
+        <div className="adminCardHead"><div><span>NUEVO MOVIMIENTO</span><h2>Registrar cobro o abono</h2><p>El monto se aplica al saldo en la moneda de la factura. La tasa queda congelada en este movimiento y al guardar se descarga un recibo.</p></div><Plus size={24}/></div>
         <div className="paymentFormGrid">
           <label className="field wide"><span>Factura</span><select value={draft.invoiceNumber} onChange={event => chooseInvoice(event.target.value)}><option value="">Seleccionar factura…</option>{eligible.map(invoice => { const outstanding = balanceForInvoice(invoice, payments); const hasLedger = appliedForInvoice(invoice.number, payments) > 0; return <option value={invoice.number} key={invoice.number}>{invoice.number} · {invoice.client.name || 'Sin cliente'} · saldo {money(outstanding, invoice.currency)}{invoice.status === 'paid' && !hasLedger ? ' · pagada sin movimientos' : ''}</option> })}</select></label>
           {selected && <div className="paymentInvoiceSummary wide"><div><span>Total</span><strong>{money(invoiceTotal, selected.currency)}</strong></div><div><span>Abonado</span><strong>{money(applied, selected.currency)}</strong></div><div><span>Saldo</span><strong>{money(balance, selected.currency)}</strong></div></div>}
@@ -150,15 +179,15 @@ export default function PaymentsView() {
           <label className="field wide"><span>Nota</span><textarea rows={2} value={draft.notes} onChange={event => setDraft(current => ({ ...current, notes: event.target.value }))} placeholder="Observación opcional sobre este cobro"/></label>
         </div>
         {message && <div className="paymentMessage"><CheckCircle2 size={17}/>{message}</div>}
-        <button className="primary full" disabled={saving || !selected} onClick={() => void registerPayment()}>{saving ? 'Registrando…' : 'Registrar movimiento'}</button>
+        <button className="primary full" disabled={saving || !selected} onClick={() => void registerPayment()}>{saving ? 'Registrando…' : 'Registrar movimiento y generar recibo'}</button>
       </section>
 
       <section className="card ledgerCard">
-        <div className="adminCardHead"><div><span>LIBRO DE CAJA</span><h2>Últimos movimientos</h2><p>Cada fila representa dinero realmente registrado como ingreso.</p></div></div>
-        {payments.length ? <div className="ledgerList">{payments.slice(0, 30).map(payment => { const invoice = invoices.find(item => item.number === payment.invoiceNumber); return <article key={payment.key}><div className="ledgerMain"><strong>{paymentMethodLabels[payment.method]}</strong><span>{payment.date} · {payment.invoiceNumber} · {invoice?.client.name || 'Cliente'}</span>{payment.reference && <small>Ref. {payment.reference}</small>}</div><div className="ledgerAmounts"><strong>{money(payment.amountApplied, payment.invoiceCurrency)}</strong><span>{money(payment.amountVes, 'VES')}</span></div><button className="danger icon" title="Eliminar cobro" onClick={() => void removePayment(payment)}><Trash2 size={16}/></button></article>})}</div> : <div className="adminEmpty">Todavía no has registrado cobros. Selecciona una factura y registra el primer ingreso.</div>}
+        <div className="adminCardHead"><div><span>LIBRO DE CAJA</span><h2>Últimos movimientos</h2><p>Cada fila representa dinero realmente registrado como ingreso. Puedes volver a descargar el recibo en cualquier momento.</p></div></div>
+        {payments.length ? <div className="ledgerList">{payments.slice(0, 30).map(payment => { const invoice = invoices.find(item => item.number === payment.invoiceNumber); return <article key={payment.key}><div className="ledgerMain"><strong>{paymentMethodLabels[payment.method]}</strong><span>{payment.date} · {payment.invoiceNumber} · {invoice?.client.name || 'Cliente'}</span>{payment.reference && <small>Ref. {payment.reference}</small>}</div><div className="ledgerAmounts"><strong>{money(payment.amountApplied, payment.invoiceCurrency)}</strong><span>{money(payment.amountVes, 'VES')}</span></div><div className="actions"><button title="Descargar recibo" onClick={() => downloadReceipt(payment)}><Download size={16}/></button><button className="danger" title="Eliminar cobro" onClick={() => void removePayment(payment)}><Trash2 size={16}/></button></div></article>})}</div> : <div className="adminEmpty">Todavía no has registrado cobros. Selecciona una factura y registra el primer ingreso.</div>}
       </section>
     </section>
 
-    <p className="adminFootnote">La caja usa la fecha real de cada movimiento y conserva la tasa utilizada en ese momento. El saldo se calcula en la moneda original de la factura.</p>
+    <p className="adminFootnote">La caja usa la fecha real de cada movimiento y conserva la tasa utilizada en ese momento. El saldo se calcula en la moneda original de la factura. Cada cobro genera un recibo administrativo independiente.</p>
   </main>
 }
