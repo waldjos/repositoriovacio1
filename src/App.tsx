@@ -245,7 +245,7 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
   }
 
   const download = () => buildInvoicePdf(invoice, company).save(`${invoice.number}.pdf`)
-  const message = `Hola ${invoice.client.name}. Te comparto ${invoice.type.toLowerCase()} ${invoice.number} por un total de ${money(sum.total, invoice.currency)}. Gracias por tu preferencia.`
+  const message = `Hola ${invoice.client.name}. Esta es tu ${invoice.type.toLowerCase()} ${invoice.number} por un monto total de ${money(sum.total, invoice.currency)}.\n\nAl final del PDF encontrarás el botón “ABRIR Y COPIAR DATOS”. Allí podrás copiar los datos bancarios o el método de pago habilitado para esta factura.\n\nDespués de realizar el pago, por favor carga el voucher o capture en esa misma pantalla para comprobar tu pago. Así podremos revisarlo, registrar el cobro y generar tu recibo.`
   const share = async () => {
     if (!invoice.client.name.trim()) return notify('Completa el cliente antes de compartir.')
     const file = pdfFile(invoice, company)
@@ -265,7 +265,7 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
     download(); window.open(phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
     notify('Se descargó el PDF para que puedas adjuntarlo.')
   }
-  const email = () => { location.href = `mailto:${invoice.client.email}?subject=${encodeURIComponent(`${invoice.type} ${invoice.number}`)}&body=${encodeURIComponent(`Hola ${invoice.client.name},\n\nTe comparto ${invoice.type.toLowerCase()} ${invoice.number} por un total de ${money(sum.total, invoice.currency)}.\n\nSaludos.`)}` }
+  const email = () => { location.href = `mailto:${invoice.client.email}?subject=${encodeURIComponent(`${invoice.type} ${invoice.number}`)}&body=${encodeURIComponent(`${message}\n\nSaludos.`)}` }
 
   const conversionOptions: Array<{ key: ConversionTarget; label: string }> = [
     { key: 'VES', label: 'Bolívares (VES)' },
