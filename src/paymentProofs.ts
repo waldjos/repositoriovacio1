@@ -1,6 +1,5 @@
 import { collection, doc, onSnapshot, updateDoc, type Timestamp } from 'firebase/firestore'
-import { getDownloadURL, ref } from 'firebase/storage'
-import { firebaseStorage, firestore } from './firebase'
+import { firestore } from './firebase'
 import type { PaymentMethodKey } from './types'
 
 export type PaymentProofStatus = 'pending' | 'reviewing' | 'processed' | 'rejected'
@@ -17,7 +16,7 @@ export interface PaymentProofSubmission {
   paymentDate: string
   reference?: string
   note?: string
-  storagePath: string
+  imageData?: string
   originalFileName: string
   contentType: string
   size: number
@@ -52,9 +51,9 @@ export function subscribePaymentProofs(ownerUid: string, callback: (rows: Paymen
   })
 }
 
-export async function paymentProofFileUrl(storagePath: string) {
-  if (!firebaseStorage) throw new Error('Firebase Storage no está configurado.')
-  return getDownloadURL(ref(firebaseStorage, storagePath))
+export async function paymentProofFileUrl(proof: PaymentProofSubmission) {
+  if (!proof.imageData?.startsWith('data:image/')) throw new Error('El comprobante no contiene una imagen disponible.')
+  return proof.imageData
 }
 
 export async function setPaymentProofStatus(ownerUid: string, proofId: string, status: PaymentProofStatus) {
