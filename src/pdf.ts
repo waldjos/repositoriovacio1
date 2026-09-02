@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { invoiceEquivalentValues } from './rates'
 import type { Company, Invoice } from './types'
 
 export function money(value: number, currency = 'USD') {
@@ -19,10 +20,12 @@ export function totals(invoice: Invoice) {
 }
 
 const statusLabel = (status: Invoice['status']) => ({ draft: 'BORRADOR', issued: 'POR COBRAR', paid: 'PAGADA', cancelled: 'ANULADA' }[status])
+const plain = (value?: number, suffix = '') => Number.isFinite(value) ? `${Number(value).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${suffix}` : 'N/D'
 
 export function buildInvoicePdf(invoice: Invoice, company: Company) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const { subtotal, discount, tax, total } = totals(invoice)
+  const equivalents = invoiceEquivalentValues(invoice, total)
   const blue = [37, 99, 235] as [number, number, number]
   const navy = [11, 22, 51] as [number, number, number]
   const cyan = [6, 182, 212] as [number, number, number]
@@ -103,6 +106,10 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
   doc.text(invoice.currency, 548, 201, { align: 'right' })
   doc.text('Forma de pago', 382, 218)
   doc.text(invoice.paymentMethod || 'No indicada', 548, 218, { align: 'right', maxWidth: 125 })
+  if (invoice.rateValue) {
+    doc.text('Tasa aplicada', 382, 235)
+    doc.text(`${plain(invoice.rateValue)} Bs`, 548, 235, { align: 'right' })
+  }
 
   autoTable(doc, {
     startY: 274,
@@ -164,13 +171,54 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
     doc.text(doc.splitTextToSize(invoice.notes, 280), 28, notesY + 16)
   }
 
+  let nextBlockY = Math.max(summaryY + 138, 520)
+  if (invoice.rateValue && equivalents) {
+    const rateBoxH = invoice.showRateConversions ? 104 : 70
+    doc.setFillColor(244, 248, 255)
+    doc.roundedRect(28, nextBlockY, 539, rateBoxH, 12, 12, 'F')
+    doc.setFillColor(...blue)
+    doc.roundedRect(28, nextBlockY, 6, rateBoxH, 3, 3, 'F')
+    doc.setTextColor(...blue)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text('TASA Y EQUIVALENTES DE PAGO', 44, nextBlockY + 20)
+    doc.setTextColor(...ink)
+    doc.setFontSize(8.5)
+    doc.text(invoice.rateLabel || 'Tasa aplicada', 44, nextBlockY + 39)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...muted)
+    doc.text(`1 unidad = ${plain(invoice.rateValue)} Bs`, 210, nextBlockY + 39)
+    doc.text(`Equivalente: ${money(equivalents.ves, 'VES')}`, 551, nextBlockY + 39, { align: 'right' })
+    if (invoice.showRateConversions) {
+      const values = [
+        ['USD BCV', equivalents.USD != null ? money(equivalents.USD, 'USD') : 'N/D'],
+        ['EUR BCV', equivalents.EUR != null ? money(equivalents.EUR, 'EUR') : 'N/D'],
+        ['USDT Binance', equivalents.USDT_BINANCE != null ? `${plain(equivalents.USDT_BINANCE)} USDT` : 'N/D'],
+        ['USDT promedio', equivalents.USDT_AVERAGE != null ? `${plain(equivalents.USDT_AVERAGE)} USDT` : 'N/D'],
+      ]
+      values.forEach(([label, value], index) => {
+        const col = index % 2
+        const row = Math.floor(index / 2)
+        const x = 44 + col * 254
+        const y = nextBlockY + 62 + row * 18
+        doc.setFont('helvetica', 'normal'); doc.setTextColor(...muted); doc.text(label, x, y)
+        doc.setFont('helvetica', 'bold'); doc.setTextColor(...ink); doc.text(value, x + 112, y)
+      })
+    }
+    if (invoice.rateCapturedAt) {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); doc.setTextColor(...muted)
+      doc.text(`Tasa capturada: ${new Date(invoice.rateCapturedAt).toLocaleString('es-VE')}`, 551, nextBlockY + rateBoxH - 8, { align: 'right' })
+    }
+    nextBlockY += rateBoxH + 16
+  }
+
   const mobile = [company.mobilePaymentBank, company.mobilePaymentPhone, company.mobilePaymentId].filter(Boolean)
   const bank = [company.bankName, company.bankAccountType, company.bankAccountNumber, company.bankAccountHolder].filter(Boolean)
   const binance = [company.binanceId].filter(Boolean)
   const hasPaymentData = mobile.length > 0 || bank.length > 0 || binance.length > 0 || Boolean(company.paymentNotes)
 
-  if (hasPaymentData) {
-    const paymentY = Math.max(summaryY + 138, 520)
+  if (hasPaymentData && nextBlockY < 680) {
+    const paymentY = nextBlockY
     const paymentH = company.paymentNotes ? 118 : 94
     doc.setFillColor(248, 250, 255)
     doc.roundedRect(28, paymentY, 539, paymentH, 12, 12, 'F')
@@ -190,23 +238,13 @@ export function buildInvoicePdf(invoice: Invoice, company: Company) {
     columns.forEach((column, index) => {
       if (!column.lines.length) return
       const x = xPositions[index]
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(7.5)
-      doc.setTextColor(...navy)
-      doc.text(column.title, x, paymentY + 40)
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7.5)
-      doc.setTextColor(...muted)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...navy); doc.text(column.title, x, paymentY + 40)
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...muted)
       column.lines.slice(0, 4).forEach((value, lineIndex) => doc.text(doc.splitTextToSize(String(value), 155), x, paymentY + 54 + lineIndex * 11))
     })
-
     if (company.paymentNotes) {
-      doc.setDrawColor(...line)
-      doc.line(44, paymentY + 83, 551, paymentY + 83)
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7.3)
-      doc.setTextColor(...muted)
-      doc.text(doc.splitTextToSize(company.paymentNotes, 500), 44, paymentY + 98)
+      doc.setDrawColor(...line); doc.line(44, paymentY + 83, 551, paymentY + 83)
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.3); doc.setTextColor(...muted); doc.text(doc.splitTextToSize(company.paymentNotes, 500), 44, paymentY + 98)
     }
   }
 
