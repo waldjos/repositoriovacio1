@@ -17,8 +17,15 @@ service cloud.firestore {
         && request.resource.data.amountPaid is number
         && request.resource.data.amountPaid > 0
         && request.resource.data.amountPaid < 1000000000
+        && request.resource.data.imageData is string
+        && request.resource.data.imageData.size() > 100
+        && request.resource.data.imageData.size() <= 700000
+        && request.resource.data.contentType == 'image/jpeg'
+        && request.resource.data.size is number
+        && request.resource.data.size > 0
+        && request.resource.data.size <= 550000
         && request.resource.data.storagePath is string
-        && request.resource.data.storagePath.size() <= 500;
+        && request.resource.data.storagePath.size() <= 300;
 
       allow read, update, delete: if request.auth != null && request.auth.uid == ownerUid;
     }
