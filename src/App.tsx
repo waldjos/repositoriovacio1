@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArchiveRestore, Calculator, Check, Copy, Download, Edit3, FilePlus2, FileText, Home, Mail, Plus, ReceiptText, Save, Search, Send, Settings, Share2, Trash2, Upload, WifiOff } from 'lucide-react'
 import { db, defaultCompany, ensureCompany, exportBackup, importBackup } from './db'
 import { buildInvoicePdf, money, pdfFile, totals } from './pdf'
+import { appliedForInvoice, balanceForInvoice } from './payments'
 import RatesView from './RatesView'
 import { fetchLiveRates, formatRate, getCachedRates, getRateValue, invoiceEquivalentValues, rateSourceLabels, refreshRatesIfDue } from './rates'
-import type { BackupData, Client, Company, ConversionTarget, Invoice, InvoiceItem, InvoiceStatus, PaymentDisplay, RateSnapshot, RateSource } from './types'
+import type { BackupData, Client, Company, ConversionTarget, Invoice, InvoiceItem, InvoiceStatus, Payment, PaymentDisplay, RateSnapshot, RateSource } from './types'
 
 type Mode = 'home' | 'editor' | 'rates' | 'settings'
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> }
@@ -37,10 +38,26 @@ function blank(c: Company): Invoice {
   }
 }
 
-function totalsByCurrency(invoices: Invoice[], status: InvoiceStatus) {
+function groupedMoney(rows: Array<{ currency: string; amount: number }>) {
   const grouped = new Map<string, number>()
-  invoices.filter(i => i.status === status).forEach(i => grouped.set(i.currency, (grouped.get(i.currency) || 0) + totals(i).total))
+  rows.forEach(row => grouped.set(row.currency, (grouped.get(row.currency) || 0) + row.amount))
   return [...grouped.entries()].map(([currency, value]) => money(value, currency)).join(' · ') || '0,00'
+}
+
+function pendingByCurrency(invoices: Invoice[], payments: Payment[]) {
+  return groupedMoney(invoices
+    .filter(invoice => invoice.status === 'issued')
+    .map(invoice => ({ currency: invoice.currency, amount: balanceForInvoice(invoice, payments) }))
+    .filter(row => row.amount > 0.005))
+}
+
+function collectedByCurrency(invoices: Invoice[], payments: Payment[]) {
+  const rows = payments.map(payment => ({ currency: payment.invoiceCurrency, amount: Number(payment.amountApplied) || 0 }))
+  const withLedger = new Set(payments.map(payment => payment.invoiceNumber))
+  invoices.filter(invoice => invoice.status === 'paid' && !withLedger.has(invoice.number)).forEach(invoice => {
+    rows.push({ currency: invoice.currency, amount: totals(invoice).total })
+  })
+  return groupedMoney(rows)
 }
 
 function currencyForRate(source: RateSource) {
@@ -53,6 +70,7 @@ export default function App() {
   const [mode, setMode] = useState<Mode>('home')
   const [company, setCompany] = useState<Company>(defaultCompany)
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [payments, setPayments] = useState<Payment[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [editing, setEditing] = useState<Invoice | null>(null)
   const [search, setSearch] = useState('')
@@ -64,10 +82,10 @@ export default function App() {
 
   async function refresh() {
     await ensureCompany()
-    const [c, inv, cl] = await Promise.all([
-      db.company.get(1), db.invoices.orderBy('updatedAt').reverse().toArray(), db.clients.orderBy('name').toArray()
+    const [c, inv, pay, cl] = await Promise.all([
+      db.company.get(1), db.invoices.orderBy('updatedAt').reverse().toArray(), db.payments.orderBy('date').reverse().toArray(), db.clients.orderBy('name').toArray()
     ])
-    setCompany(c ? { ...defaultCompany, ...c } : defaultCompany); setInvoices(inv); setClients(cl)
+    setCompany(c ? { ...defaultCompany, ...c } : defaultCompany); setInvoices(inv); setPayments(pay); setClients(cl)
   }
 
   useEffect(() => {
@@ -132,7 +150,7 @@ export default function App() {
 
     <main className="page">
       {!online && <div className="offline"><WifiOff size={16}/>Estás sin conexión. Puedes seguir trabajando porque los datos se guardan en este dispositivo.</div>}
-      {mode === 'home' && <HomeView invoices={filtered} all={invoices} search={search} setSearch={setSearch} onNew={startNew} onEdit={edit} onDuplicate={duplicate} onDelete={remove} onStatusChange={changeStatus}/>} 
+      {mode === 'home' && <HomeView invoices={filtered} all={invoices} payments={payments} search={search} setSearch={setSearch} onNew={startNew} onEdit={edit} onDuplicate={duplicate} onDelete={remove} onStatusChange={changeStatus}/>} 
       {mode === 'rates' && <RatesView onCreateInvoiceWithRate={startNewWithRate} notify={notify}/>} 
       {mode === 'editor' && editing && <Editor invoice={editing} company={company} clients={clients} notify={notify} onBack={() => setMode('home')} onSaved={async s => { setEditing(s); await refresh(); notify(`${s.number} guardada.`) }}/>} 
       {mode === 'settings' && <SettingsView company={company} installPrompt={installPrompt} notify={notify} onChanged={refresh} onInstalled={() => setInstallPrompt(null)}/>} 
@@ -142,23 +160,28 @@ export default function App() {
   </div>
 }
 
-function HomeView({ invoices, all, search, setSearch, onNew, onEdit, onDuplicate, onDelete, onStatusChange }: {
-  invoices: Invoice[]; all: Invoice[]; search: string; setSearch: (v: string) => void;
+function HomeView({ invoices, all, payments, search, setSearch, onNew, onEdit, onDuplicate, onDelete, onStatusChange }: {
+  invoices: Invoice[]; all: Invoice[]; payments: Payment[]; search: string; setSearch: (v: string) => void;
   onNew: () => void; onEdit: (i: Invoice) => void; onDuplicate: (i: Invoice) => void; onDelete: (i: Invoice) => void; onStatusChange: (i: Invoice, status: InvoiceStatus) => void
 }) {
-  const pending = totalsByCurrency(all, 'issued')
-  const paid = totalsByCurrency(all, 'paid')
+  const pending = pendingByCurrency(all, payments)
+  const paid = collectedByCurrency(all, payments)
   return <>
     <section className="hero"><div><span>ZIVI FACTURA · CONTROL ADMINISTRATIVO</span><h1>Presupuesta, factura y cobra con una imagen profesional.</h1><p>Crea documentos, controla cuentas por cobrar y trabaja con tasas BCV, euro y USDT desde el mismo sistema.</p></div><button className="heroButton" onClick={onNew}><FilePlus2 size={20}/>Crear documento</button></section>
-    <section className="metrics"><Metric label="Documentos" value={String(all.length)}/><Metric label="Por cobrar" value={pending}/><Metric label="Cobrado" value={paid}/></section>
+    <section className="metrics"><Metric label="Documentos" value={String(all.length)}/><Metric label="Por cobrar · saldo real" value={pending}/><Metric label="Cobrado · movimientos" value={paid}/></section>
     <section className="card">
-      <div className="cardHead"><div><h2>Facturas y documentos</h2><p>Abre cualquier documento para modificarlo, cobrarlo o compartirlo nuevamente.</p></div><button className="primary" onClick={onNew}><Plus size={18}/>Nuevo</button></div>
+      <div className="cardHead"><div><h2>Facturas y documentos</h2><p>El saldo visible se actualiza con cada abono registrado en Cobros / Caja.</p></div><button className="primary" onClick={onNew}><Plus size={18}/>Nuevo</button></div>
       <label className="search"><Search size={18}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por cliente, número, fecha o estado…"/></label>
-      {invoices.length ? <div className="list">{invoices.map(i => <article className="row" key={i.id}>
-        <button className="doc" onClick={() => onEdit(i)}><span className="fileIcon"><FileText size={19}/></span><span><strong>{i.number}</strong><small>{i.client.name || 'Sin cliente'} · {i.date}{i.rateLabel ? ` · ${i.rateLabel}` : ''}</small></span></button>
-        <span className={`status ${i.status}`}>{labels[i.status]}</span><strong className="amount">{money(totals(i).total, i.currency)}</strong>
-        <div className="actions">{i.status === 'issued' && <button title="Marcar como pagada" onClick={() => onStatusChange(i, 'paid')}><Check size={17}/></button>}<button title="Editar" onClick={() => onEdit(i)}><Edit3 size={17}/></button><button title="Duplicar" onClick={() => onDuplicate(i)}><Copy size={17}/></button><button title="Eliminar" className="danger" onClick={() => onDelete(i)}><Trash2 size={17}/></button></div>
-      </article>)}</div> : <div className="empty"><ReceiptText size={34}/><h3>{search ? 'Sin resultados' : 'Aún no hay facturas'}</h3><p>{search ? 'Prueba con otro término.' : 'Crea tu primer documento para comenzar.'}</p>{!search && <button className="primary" onClick={onNew}>Crear factura</button>}</div>}
+      {invoices.length ? <div className="list">{invoices.map(i => {
+        const applied = appliedForInvoice(i.number, payments)
+        const balance = balanceForInvoice(i, payments)
+        const visibleAmount = i.status === 'issued' ? balance : totals(i).total
+        return <article className="row" key={i.id}>
+          <button className="doc" onClick={() => onEdit(i)}><span className="fileIcon"><FileText size={19}/></span><span><strong>{i.number}</strong><small>{i.client.name || 'Sin cliente'} · {i.date}{applied > 0 ? ` · Abonado ${money(applied, i.currency)}` : i.rateLabel ? ` · ${i.rateLabel}` : ''}</small></span></button>
+          <span className={`status ${i.status}`}>{labels[i.status]}</span><strong className="amount">{i.status === 'issued' ? `Saldo ${money(visibleAmount, i.currency)}` : money(visibleAmount, i.currency)}</strong>
+          <div className="actions">{i.status === 'issued' && <button title="Marcar como pagada" onClick={() => onStatusChange(i, 'paid')}><Check size={17}/></button>}<button title="Editar" onClick={() => onEdit(i)}><Edit3 size={17}/></button><button title="Duplicar" onClick={() => onDuplicate(i)}><Copy size={17}/></button><button title="Eliminar" className="danger" onClick={() => onDelete(i)}><Trash2 size={17}/></button></div>
+        </article>
+      })}</div> : <div className="empty"><ReceiptText size={34}/><h3>{search ? 'Sin resultados' : 'Aún no hay facturas'}</h3><p>{search ? 'Prueba con otro término.' : 'Crea tu primer documento para comenzar.'}</p>{!search && <button className="primary" onClick={onNew}>Crear factura</button>}</div>}
     </section>
   </>
 }
