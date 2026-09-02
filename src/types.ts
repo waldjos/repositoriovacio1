@@ -3,6 +3,7 @@ export type InvoiceType = 'Factura' | 'Proforma' | 'Presupuesto'
 export type RateSource = 'none' | 'bcv_usd' | 'bcv_eur' | 'binance' | 'usdt_average' | 'custom'
 export type ConversionTarget = 'VES' | 'USD' | 'EUR' | 'USDT_BINANCE' | 'USDT_AVERAGE'
 export type PaymentDisplay = 'mobile' | 'bank' | 'binance' | 'notes'
+export type PaymentMethodKey = 'mobile' | 'transfer' | 'binance' | 'cash' | 'zelle' | 'card' | 'other'
 
 export interface RateSnapshot {
   usdBcv?: number
@@ -94,11 +95,30 @@ export interface Invoice {
   updatedAt: string
 }
 
+export interface Payment {
+  id?: number
+  key: string
+  invoiceNumber: string
+  invoiceCurrency: string
+  amountApplied: number
+  method: PaymentMethodKey
+  date: string
+  reference?: string
+  notes?: string
+  rateValue: number
+  amountVes: number
+  rateCapturedAt?: string
+  rateSnapshot?: RateSnapshot
+  createdAt: string
+  updatedAt: string
+}
+
 export interface BackupData {
-  version: 1
+  version: 1 | 2
   exportedAt: string
   company: Company[]
   clients: Client[]
   products: Product[]
   invoices: Invoice[]
+  payments?: Payment[]
 }
