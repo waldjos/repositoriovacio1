@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, CheckCircle2, Cloud, CloudOff, LogOut, ReceiptText, ShieldCheck, Wallet, WalletCards } from 'lucide-react'
+import { BarChart3, CheckCircle2, Cloud, CloudOff, DollarSign, LogOut, ReceiptText, ShieldCheck, Wallet, WalletCards } from 'lucide-react'
 import AdminDashboard from './AdminDashboard'
 import App from './App'
 import PaymentsView from './PaymentsView'
+import ReceivablesView from './ReceivablesView'
 import { db, ensureCompany } from './db'
 import { firebaseConfigured, observeAuth, signInWithGoogle, signOutFirebase, type FirebaseUser } from './firebase'
 import { startFirebaseSync, syncFirebaseNow, type SyncState } from './firebaseSync'
@@ -10,7 +11,7 @@ import './auth.css'
 import './admin.css'
 
 const LOCAL_UID_KEY = 'zivifactura.firebase.uid'
-type Workspace = 'billing' | 'payments' | 'income' | 'stats'
+type Workspace = 'billing' | 'receivables' | 'payments' | 'income' | 'stats'
 
 async function prepareLocalAccount(uid: string) {
   const previousUid = localStorage.getItem(LOCAL_UID_KEY)
@@ -97,11 +98,12 @@ function WorkspaceShell() {
   return <>
     <nav className="workspaceNav" aria-label="Áreas administrativas">
       <button className={workspace === 'billing' ? 'active' : ''} onClick={() => setWorkspace('billing')}><ReceiptText size={17}/>Facturación</button>
+      <button className={workspace === 'receivables' ? 'active' : ''} onClick={() => setWorkspace('receivables')}><DollarSign size={17}/>Por cobrar</button>
       <button className={workspace === 'payments' ? 'active' : ''} onClick={() => setWorkspace('payments')}><WalletCards size={17}/>Cobros / Caja</button>
       <button className={workspace === 'income' ? 'active' : ''} onClick={() => setWorkspace('income')}><Wallet size={17}/>Ingresos</button>
       <button className={workspace === 'stats' ? 'active' : ''} onClick={() => setWorkspace('stats')}><BarChart3 size={17}/>Estadísticas</button>
     </nav>
-    {workspace === 'billing' ? <App/> : workspace === 'payments' ? <PaymentsView/> : <AdminDashboard view={workspace}/>} 
+    {workspace === 'billing' ? <App/> : workspace === 'receivables' ? <ReceivablesView/> : workspace === 'payments' ? <PaymentsView/> : <AdminDashboard view={workspace}/>} 
   </>
 }
 
