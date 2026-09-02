@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, updateDoc, type Timestamp } from 'firebase/firestore'
+import { collection, doc, getDoc, onSnapshot, updateDoc, type Timestamp } from 'firebase/firestore'
 import { firestore } from './firebase'
 import type { PaymentMethodKey } from './types'
 
@@ -17,6 +17,7 @@ export interface PaymentProofSubmission {
   reference?: string
   note?: string
   imageData?: string
+  storagePath: string
   originalFileName: string
   contentType: string
   size: number
@@ -51,9 +52,14 @@ export function subscribePaymentProofs(ownerUid: string, callback: (rows: Paymen
   })
 }
 
-export async function paymentProofFileUrl(proof: PaymentProofSubmission) {
-  if (!proof.imageData?.startsWith('data:image/')) throw new Error('El comprobante no contiene una imagen disponible.')
-  return proof.imageData
+export async function paymentProofFileUrl(storagePath: string) {
+  if (!firestore || !storagePath.startsWith('firestore-inline:')) throw new Error('El comprobante no contiene una imagen disponible.')
+  const [, ownerUid, proofId] = storagePath.split(':')
+  if (!ownerUid || !proofId) throw new Error('Referencia de comprobante inválida.')
+  const snapshot = await getDoc(doc(firestore, 'paymentProofs', ownerUid, 'submissions', proofId))
+  const data = snapshot.data() as Partial<PaymentProofSubmission> | undefined
+  if (!data?.imageData?.startsWith('data:image/')) throw new Error('El comprobante no contiene una imagen disponible.')
+  return data.imageData
 }
 
 export async function setPaymentProofStatus(ownerUid: string, proofId: string, status: PaymentProofStatus) {
