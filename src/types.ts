@@ -1,5 +1,19 @@
 export type InvoiceStatus = 'draft' | 'issued' | 'paid' | 'cancelled'
 export type InvoiceType = 'Factura' | 'Proforma' | 'Presupuesto'
+export type RateSource = 'none' | 'bcv_usd' | 'bcv_eur' | 'binance' | 'usdt_average' | 'custom'
+
+export interface RateSnapshot {
+  usdBcv?: number
+  eurBcv?: number
+  binanceBuy?: number
+  binanceSell?: number
+  bybitBuy?: number
+  bybitSell?: number
+  usdtAverage?: number
+  brechaPct?: number
+  capturedAt: string
+  sourceCapturedAt?: string
+}
 
 export interface Company {
   id: number
@@ -66,6 +80,12 @@ export interface Invoice {
   paymentMethod: string
   notes: string
   currency: string
+  rateSource?: RateSource
+  rateLabel?: string
+  rateValue?: number
+  rateCapturedAt?: string
+  rateSnapshot?: RateSnapshot
+  showRateConversions?: boolean
   createdAt: string
   updatedAt: string
 }
