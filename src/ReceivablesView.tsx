@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Clock3, DollarSign, RefreshCw, TrendingUp, WalletCards } from 'lucide-react'
 import { db } from './db'
 import { money, totals } from './pdf'
-import { balanceForInvoice, currentReceivableRate, appliedForInvoice, receivableBalanceVes } from './payments'
+import { balanceForInvoice, currentReceivableRate, appliedForInvoice, receivableBalanceVes, paymentMethodLabels } from './payments'
 import { fetchLiveRates, getCachedRates, pivotConversions, rateSourceLabels, refreshRatesIfDue } from './rates'
 import type { Invoice, Payment, RateSnapshot } from './types'
 import './receivables.css'
@@ -73,7 +73,17 @@ export default function ReceivablesView() {
       const rate = currentReceivableRate(invoice, rates)
       const ves = receivableBalanceVes(invoice, payments, rates)
       const days = daysOpen(invoice)
-      return { invoice, total, paid, balance, rate, ves, days }
+      const invoicePayments = payments
+        .filter(payment => payment.invoiceNumber === invoice.number)
+        .slice()
+        .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+      let running = total
+      const history = invoicePayments.map(payment => {
+        const before = running
+        running = Math.max(0, running - (Number(payment.amountApplied) || 0))
+        return { payment, before, after: running }
+      }).reverse()
+      return { invoice, total, paid, balance, rate, ves, days, history }
     })
     .filter(row => row.balance > 0.005)
     .sort((a, b) => b.days - a.days), [invoices, payments, rates])
@@ -102,12 +112,12 @@ export default function ReceivablesView() {
 
   return <main className="receivablesPage">
     <section className="receivablesHero">
-      <div><span>ZIVIFACTURA · CUENTAS POR COBRAR</span><h1>Mantén la deuda en dólares y mira cuánto representa hoy en bolívares.</h1><p>El monto original de cada factura nunca se altera. Solo recalculamos su valoración administrativa con la tasa vigente para que puedas estimar cuánto tienes pendiente por cobrar.</p></div>
+      <div><span>ZIVIFACTURA · CUENTAS POR COBRAR</span><h1>Mantén la deuda en dólares y mira cuánto representa hoy en bolívares.</h1><p>El monto original de cada factura nunca se altera. Cada abono queda en el historial y se resta automáticamente del saldo pendiente antes de calcular su valoración actual.</p></div>
       <button className="secondary" disabled={loading} onClick={() => void load(true)}><RefreshCw size={17} className={loading ? 'spin' : ''}/>{loading ? 'Actualizando…' : 'Actualizar valoración'}</button>
     </section>
 
     <section className="receivableSummary">
-      <article className="receivablePrimary"><WalletCards/><span>SALDO NOMINAL PENDIENTE</span><strong>{nominalText}</strong><small>{openRows.length} factura{openRows.length === 1 ? '' : 's'} abierta{openRows.length === 1 ? '' : 's'}. Este saldo permanece en la moneda original.</small></article>
+      <article className="receivablePrimary"><WalletCards/><span>SALDO NOMINAL PENDIENTE</span><strong>{nominalText}</strong><small>{openRows.length} factura{openRows.length === 1 ? '' : 's'} abierta{openRows.length === 1 ? '' : 's'}. Este saldo ya descuenta todos los abonos registrados.</small></article>
       <div className="receivableKpis">
         <article><span>Equivalente hoy</span><strong>{money(summary.ves, 'VES')}</strong><small>Valoración dinámica</small></article>
         <article><span>Equiv. USD BCV</span><strong>{summary.equivalents.USD != null ? money(summary.equivalents.USD, 'USD') : 'N/D'}</strong><small>Sobre el total valorizado</small></article>
@@ -125,11 +135,14 @@ export default function ReceivablesView() {
     </section>
 
     <section className="card receivableListCard">
-      <div className="receivableListHead"><div><span>DETALLE</span><h2>Facturas pendientes</h2><p>Los abonos registrados en Caja se descuentan automáticamente del saldo antes de valorizarlo.</p></div><DollarSign size={24}/></div>
+      <div className="receivableListHead"><div><span>DETALLE</span><h2>Facturas pendientes</h2><p>Los abonos registrados en Caja se descuentan automáticamente y quedan visibles como historial de movimientos de cada factura.</p></div><DollarSign size={24}/></div>
       {openRows.length ? <div className="receivableList">{openRows.map(row => <article key={row.invoice.number}>
-        <div className="receivableDoc"><strong>{row.invoice.number}</strong><span>{row.invoice.client.name || 'Sin cliente'}</span><small>{row.days} día{row.days === 1 ? '' : 's'} pendiente{row.days === 1 ? '' : 's'}</small></div>
-        <div className="receivableAmounts"><span>Factura <b>{money(row.total, row.invoice.currency)}</b></span>{row.paid > 0 && <span>Abonado <b>{money(row.paid, row.invoice.currency)}</b></span>}<span>Saldo <strong>{money(row.balance, row.invoice.currency)}</strong></span></div>
-        <div className="receivableToday"><span>Valor hoy</span><strong>{row.rate ? money(row.ves, 'VES') : 'Sin tasa'}</strong><small>{rateLabel(row.invoice)}{row.rate ? ` · ${row.rate.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs` : ''}</small></div>
+        <div className="receivableTopRow">
+          <div className="receivableDoc"><strong>{row.invoice.number}</strong><span>{row.invoice.client.name || 'Sin cliente'}</span><small>{row.days} día{row.days === 1 ? '' : 's'} pendiente{row.days === 1 ? '' : 's'}</small></div>
+          <div className="receivableAmounts"><span>Factura <b>{money(row.total, row.invoice.currency)}</b></span>{row.paid > 0 && <span>Abonado <b>{money(row.paid, row.invoice.currency)}</b></span>}<span>Saldo <strong>{money(row.balance, row.invoice.currency)}</strong></span></div>
+          <div className="receivableToday"><span>Valor hoy</span><strong>{row.rate ? money(row.ves, 'VES') : 'Sin tasa'}</strong><small>{rateLabel(row.invoice)}{row.rate ? ` · ${row.rate.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs` : ''}</small></div>
+        </div>
+        {row.history.length > 0 && <div className="receivableHistory"><div className="receivableHistoryTitle"><strong>Historial de abonos</strong><span>{row.history.length} movimiento{row.history.length === 1 ? '' : 's'}</span></div>{row.history.map(({ payment, before, after }) => <div className="receivableHistoryRow" key={payment.key}><div><strong>{payment.date}</strong><span>{paymentMethodLabels[payment.method]}{payment.reference ? ` · Ref. ${payment.reference}` : ''}</span></div><div><span>Abono</span><strong>- {money(payment.amountApplied, row.invoice.currency)}</strong></div><div><span>Saldo</span><strong>{money(after, row.invoice.currency)}</strong><small>Antes: {money(before, row.invoice.currency)}</small></div></div>)}</div>}
       </article>)}</div> : <div className="adminEmpty">No tienes facturas pendientes por cobrar.</div>}
     </section>
 
