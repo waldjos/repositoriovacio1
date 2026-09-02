@@ -39,6 +39,13 @@ function saveRates(rates: LiveRates) {
   localStorage.setItem(RATE_CACHE_KEY, JSON.stringify(rates))
 }
 
+function localDay(date = new Date()) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 function slotName(date = new Date()) {
   const hour = date.getHours()
   if (hour >= 19) return '19'
@@ -47,10 +54,7 @@ function slotName(date = new Date()) {
 }
 
 function slotKey(date = new Date()) {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}:${slotName(date)}`
+  return `${localDay(date)}:${slotName(date)}`
 }
 
 function slotWasFetched(key: string) {
@@ -69,10 +73,17 @@ function markSlotFetched(key: string) {
   localStorage.setItem(RATE_SLOT_KEY, JSON.stringify(next))
 }
 
+function cacheIsFromToday(cached?: LiveRates | null) {
+  if (!cached?.capturedAt) return false
+  const captured = new Date(cached.capturedAt)
+  return !Number.isNaN(captured.getTime()) && localDay(captured) === localDay()
+}
+
 export async function fetchLiveRates(force = false): Promise<LiveRates> {
   const currentSlot = slotKey()
   const cached = getCachedRates()
-  if (!force && cached && (slotName() === 'pre' || slotWasFetched(currentSlot))) return cached
+  const preAfternoon = slotName() === 'pre'
+  if (!force && cached && ((preAfternoon && cacheIsFromToday(cached)) || (!preAfternoon && slotWasFetched(currentSlot)))) return cached
 
   const response = await fetch('/api/rates', { headers: { Accept: 'application/json' } })
   const payload = await response.json().catch(() => ({})) as {
@@ -87,7 +98,7 @@ export async function fetchLiveRates(force = false): Promise<LiveRates> {
   }
   const rates: LiveRates = { ...payload.data, attribution: payload.meta?.attribution }
   saveRates(rates)
-  if (slotName() !== 'pre') markSlotFetched(currentSlot)
+  if (!preAfternoon) markSlotFetched(currentSlot)
   return rates
 }
 
