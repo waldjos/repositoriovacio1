@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, CheckCircle2, Cloud, CloudOff, DollarSign, Eye, EyeOff, LogOut, Mail, ReceiptText, ShieldCheck, UserPlus, Wallet, WalletCards } from 'lucide-react'
+import { BarChart3, CheckCircle2, Cloud, CloudOff, DollarSign, Eye, EyeOff, LogOut, Mail, ReceiptText, RefreshCw, ShieldCheck, UserPlus, Wallet, WalletCards } from 'lucide-react'
 import AdminDashboard from './AdminDashboard'
 import App from './App'
 import PaymentsView from './PaymentsView'
 import ReceivablesView from './ReceivablesView'
 import { db, defaultCompany, ensureCompany } from './db'
-import { createEmailAccount, firebaseConfigured, observeAuth, requestPasswordReset, signInWithEmail, signInWithGoogle, signOutFirebase, type FirebaseUser } from './firebase'
+import { createEmailAccount, firebaseConfigured, isPasswordAccount, observeAuth, refreshAccountVerification, requestPasswordReset, sendAccountVerification, signInWithEmail, signInWithGoogle, signOutFirebase, type FirebaseUser } from './firebase'
 import { startFirebaseSync, syncFirebaseNow, type SyncState } from './firebaseSync'
 import './auth.css'
 import './admin.css'
@@ -151,7 +151,7 @@ function LoginScreen({ onLocal }: { onLocal: () => void }) {
         binanceId: signup.binanceId.trim(),
         paymentNotes: signup.paymentNotes.trim(),
       })
-      await syncFirebaseNow(credential.user.uid)
+      await sendAccountVerification(credential.user).catch(() => undefined)
     } catch (err) {
       setError(authError(err))
       setBusy(false)
@@ -232,6 +232,59 @@ function LoginScreen({ onLocal }: { onLocal: () => void }) {
   </main>
 }
 
+function VerifyEmailScreen({ user, onVerified, onLogout }: { user: FirebaseUser; onVerified: () => void; onLogout: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('Revisa tu bandeja de entrada y también la carpeta de spam.')
+  const [error, setError] = useState('')
+
+  async function resend() {
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      await sendAccountVerification(user)
+      setNotice('Correo reenviado. Puede tardar unos segundos en llegar.')
+    } catch (err) {
+      setError(authError(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function check() {
+    setBusy(true)
+    setError('')
+    try {
+      const verified = await refreshAccountVerification(user)
+      if (verified) onVerified()
+      else setNotice('Todavía no aparece verificado. Abre el enlace del correo y vuelve a pulsar este botón.')
+    } catch (err) {
+      setError(authError(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <main className="authScreen verifyScreen">
+    <section className="authPanel verifyPanel">
+      <div className="authBrand"><span><Mail size={28}/></span><div><strong>ZiviFactura</strong><small>Protección de tu cuenta</small></div></div>
+      <div className="verifyIcon"><Mail size={32}/></div>
+      <span className="eyebrow verifyEyebrow">VERIFICA TU CORREO</span>
+      <h1>Confirma que este correo es tuyo.</h1>
+      <p>Enviamos un enlace de verificación a <strong>{user.email}</strong>. Hasta confirmarlo no activaremos la sincronización de tus datos administrativos.</p>
+      <div className="verifyActions">
+        <button className="primaryAuth" disabled={busy} onClick={() => void check()}><CheckCircle2 size={18}/>{busy ? 'Comprobando…' : 'Ya verifiqué mi correo'}</button>
+        <button className="verifySecondary" disabled={busy} onClick={() => void resend()}><RefreshCw size={17}/>Reenviar correo</button>
+        <button className="localFallback" disabled={busy} onClick={onLogout}><LogOut size={16}/>Cambiar de cuenta</button>
+      </div>
+      {error && <div className="authError">{error}</div>}
+      {notice && <div className="authNotice">{notice}</div>}
+      <small className="authLegal">Las cuentas que ingresan con Google no necesitan repetir esta verificación.</small>
+      <LegalLinks/>
+    </section>
+  </main>
+}
+
 function AccountBar({ user, state, message, onLogout }: { user: FirebaseUser; state: SyncState; message: string; onLogout: () => void }) {
   const icon = state === 'error' ? <CloudOff size={16}/> : state === 'synced' ? <CheckCircle2 size={16}/> : <Cloud size={16}/>
   return <div className={`accountBar ${state}`}>
@@ -264,15 +317,19 @@ export default function AuthShell() {
   const [localOnly, setLocalOnly] = useState(false)
   const [syncState, setSyncState] = useState<SyncState>('idle')
   const [syncMessage, setSyncMessage] = useState('')
+  const [verifiedOverride, setVerifiedOverride] = useState(false)
 
   useEffect(() => observeAuth(next => {
     setUser(next)
+    setVerifiedOverride(false)
     setAuthReady(true)
     if (next) setLocalOnly(false)
   }), [])
 
+  const verificationRequired = Boolean(user && isPasswordAccount(user) && !user.emailVerified && !verifiedOverride)
+
   useEffect(() => {
-    if (!user || !firebaseConfigured) return
+    if (!user || !firebaseConfigured || verificationRequired) return
     let cleanup = () => undefined
     let cancelled = false
     void prepareLocalAccount(user.uid).then(() => {
@@ -286,10 +343,10 @@ export default function AuthShell() {
       cancelled = true
       cleanup()
     }
-  }, [user])
+  }, [user, verificationRequired])
 
   async function logout() {
-    if (user) {
+    if (user && !verificationRequired) {
       try { await syncFirebaseNow(user.uid) } catch { /* the local copy remains available */ }
     }
     await signOutFirebase()
@@ -298,6 +355,7 @@ export default function AuthShell() {
   if (!firebaseConfigured || localOnly) return <><WorkspaceShell/><footer className="appLegalFooter"><LegalLinks compact/></footer></>
   if (!authReady) return <main className="authLoading"><div className="authSpinner"/><strong>Preparando ZiviFactura…</strong></main>
   if (!user) return <LoginScreen onLocal={() => setLocalOnly(true)}/>
+  if (verificationRequired) return <VerifyEmailScreen user={user} onVerified={() => setVerifiedOverride(true)} onLogout={() => void logout()}/>
 
   return <>
     <AccountBar user={user} state={syncState} message={syncMessage} onLogout={logout}/>
