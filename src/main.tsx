@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import AuthShell from './AuthShell'
 import { initAutomaticBackup } from './cloudBackup'
 import './styles.css'
+import './payments.css'
 
 initAutomaticBackup()
 
