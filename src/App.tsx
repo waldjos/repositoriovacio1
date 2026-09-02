@@ -4,7 +4,7 @@ import { db, defaultCompany, ensureCompany, exportBackup, importBackup } from '.
 import { buildInvoicePdf, money, pdfFile, totals } from './pdf'
 import RatesView from './RatesView'
 import { fetchLiveRates, formatRate, getCachedRates, getRateValue, invoiceEquivalentValues, rateSourceLabels, refreshRatesIfDue } from './rates'
-import type { BackupData, Client, Company, Invoice, InvoiceItem, InvoiceStatus, RateSnapshot, RateSource } from './types'
+import type { BackupData, Client, Company, ConversionTarget, Invoice, InvoiceItem, InvoiceStatus, PaymentDisplay, RateSnapshot, RateSource } from './types'
 
 type Mode = 'home' | 'editor' | 'rates' | 'settings'
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> }
@@ -14,6 +14,16 @@ const today = () => new Date().toISOString().slice(0, 10)
 const uid = () => Math.random().toString(36).slice(2, 10)
 const numberFor = (c: Company) => `${c.prefix || 'FAC'}-${String(c.nextInvoiceNumber || 1).padStart(6, '0')}`
 const MAX_LOGO_BYTES = 10 * 1024 * 1024
+const ALL_CONVERSION_TARGETS: ConversionTarget[] = ['VES', 'USD', 'EUR', 'USDT_BINANCE', 'USDT_AVERAGE']
+
+function availablePaymentMethods(c: Company): PaymentDisplay[] {
+  const methods: PaymentDisplay[] = []
+  if (c.mobilePaymentBank || c.mobilePaymentPhone || c.mobilePaymentId) methods.push('mobile')
+  if (c.bankName || c.bankAccountType || c.bankAccountNumber || c.bankAccountHolder) methods.push('bank')
+  if (c.binanceId) methods.push('binance')
+  if (c.paymentNotes) methods.push('notes')
+  return methods
+}
 
 function blank(c: Company): Invoice {
   const now = new Date().toISOString()
@@ -22,7 +32,7 @@ function blank(c: Company): Invoice {
     client: { name: '', taxId: '', phone: '', email: '', address: '' },
     items: [{ id: uid(), description: '', quantity: 1, unitPrice: 0 }], discount: 0,
     taxRate: c.defaultTaxRate || 0, paymentMethod: '', notes: '', currency: c.currency || 'USD',
-    rateSource: 'none', showRateConversions: false,
+    rateSource: 'none', showRateConversions: false, conversionTargets: [], paymentMethodsVisible: availablePaymentMethods(c),
     createdAt: now, updatedAt: now,
   }
 }
@@ -88,6 +98,7 @@ export default function App() {
       rateCapturedAt: rates.capturedAt,
       rateSnapshot: { ...rates },
       showRateConversions: true,
+      conversionTargets: ['VES'],
     })
     setMode('editor')
   }
@@ -160,19 +171,37 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
   const [rates, setRates] = useState<RateSnapshot | null>(initial.rateSnapshot || getCachedRates())
   const sum = totals(invoice)
   const equivalents = invoiceEquivalentValues(invoice, sum.total)
+  const selectedConversions = invoice.conversionTargets ?? (invoice.showRateConversions ? ALL_CONVERSION_TARGETS : [])
+  const availablePayments = availablePaymentMethods(company)
+  const selectedPayments = invoice.paymentMethodsVisible ?? availablePayments
   useEffect(() => setInvoice(initial), [initial])
   useEffect(() => { if (!rates) void refreshRatesIfDue().then(next => next && setRates(next)) }, [rates])
   const set = <K extends keyof Invoice>(k: K, v: Invoice[K]) => setInvoice(p => ({ ...p, [k]: v }))
   const setClient = (k: keyof Invoice['client'], v: string) => setInvoice(p => ({ ...p, client: { ...p.client, [k]: v } }))
   const setItem = (id: string, patch: Partial<InvoiceItem>) => setInvoice(p => ({ ...p, items: p.items.map(x => x.id === id ? { ...x, ...patch } : x) }))
 
+  const conversionValue = (target: ConversionTarget) => {
+    if (!equivalents) return undefined
+    if (target === 'VES') return equivalents.ves
+    return equivalents[target]
+  }
+  const toggleConversion = (target: ConversionTarget) => {
+    const next = selectedConversions.includes(target) ? selectedConversions.filter(item => item !== target) : [...selectedConversions, target]
+    setInvoice(p => ({ ...p, conversionTargets: next, showRateConversions: next.length > 0 }))
+  }
+  const setAllConversions = (all: boolean) => setInvoice(p => ({ ...p, conversionTargets: all ? ALL_CONVERSION_TARGETS.filter(target => target === 'VES' || conversionValue(target) != null) : [], showRateConversions: all }))
+  const togglePayment = (method: PaymentDisplay) => {
+    const next = selectedPayments.includes(method) ? selectedPayments.filter(item => item !== method) : [...selectedPayments, method]
+    setInvoice(p => ({ ...p, paymentMethodsVisible: next }))
+  }
+
   async function applyRate(source: RateSource) {
     if (source === 'none') {
-      setInvoice(p => ({ ...p, rateSource: 'none', rateLabel: undefined, rateValue: undefined, rateCapturedAt: undefined, rateSnapshot: undefined, showRateConversions: false }))
+      setInvoice(p => ({ ...p, rateSource: 'none', rateLabel: undefined, rateValue: undefined, rateCapturedAt: undefined, rateSnapshot: undefined, showRateConversions: false, conversionTargets: [] }))
       return
     }
     if (source === 'custom') {
-      setInvoice(p => ({ ...p, rateSource: 'custom', rateLabel: rateSourceLabels.custom, rateValue: p.rateValue || 1, rateCapturedAt: new Date().toISOString(), rateSnapshot: rates || undefined }))
+      setInvoice(p => ({ ...p, rateSource: 'custom', rateLabel: rateSourceLabels.custom, rateValue: p.rateValue || 1, rateCapturedAt: new Date().toISOString(), rateSnapshot: rates || undefined, conversionTargets: p.conversionTargets?.length ? p.conversionTargets : ['VES'], showRateConversions: true }))
       return
     }
     let current = rates
@@ -181,7 +210,7 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
     }
     const value = getRateValue(source, current)
     if (!value) return notify(`${rateSourceLabels[source]} no está disponible en este momento.`)
-    setInvoice(p => ({ ...p, rateSource: source, rateLabel: rateSourceLabels[source], rateValue: value, rateCapturedAt: current?.capturedAt, rateSnapshot: current ? { ...current } : undefined, showRateConversions: true }))
+    setInvoice(p => ({ ...p, rateSource: source, rateLabel: rateSourceLabels[source], rateValue: value, rateCapturedAt: current?.capturedAt, rateSnapshot: current ? { ...current } : undefined, showRateConversions: true, conversionTargets: p.conversionTargets?.length ? p.conversionTargets : ['VES'] }))
   }
 
   async function refreshRateForInvoice() {
@@ -238,6 +267,20 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
   }
   const email = () => { location.href = `mailto:${invoice.client.email}?subject=${encodeURIComponent(`${invoice.type} ${invoice.number}`)}&body=${encodeURIComponent(`Hola ${invoice.client.name},\n\nTe comparto ${invoice.type.toLowerCase()} ${invoice.number} por un total de ${money(sum.total, invoice.currency)}.\n\nSaludos.`)}` }
 
+  const conversionOptions: Array<{ key: ConversionTarget; label: string }> = [
+    { key: 'VES', label: 'Bolívares (VES)' },
+    { key: 'USD', label: 'Dólar BCV' },
+    { key: 'EUR', label: 'Euro BCV' },
+    { key: 'USDT_BINANCE', label: 'USDT Binance' },
+    { key: 'USDT_AVERAGE', label: 'USDT promedio' },
+  ]
+  const paymentOptions: Array<{ key: PaymentDisplay; label: string }> = [
+    { key: 'mobile', label: 'Pago móvil' },
+    { key: 'bank', label: 'Cuenta bancaria' },
+    { key: 'binance', label: 'Binance / digital' },
+    { key: 'notes', label: 'Instrucciones adicionales' },
+  ].filter(option => availablePayments.includes(option.key))
+
   return <div className="editorGrid">
     <section className="editorMain">
       <div className="editorHead"><button className="back" onClick={onBack}>← Volver</button><div><span>DOCUMENTO</span><h1>{invoice.number}</h1></div><span className={`status ${invoice.status}`}>{labels[invoice.status]}</span></div>
@@ -260,12 +303,13 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
       <section className="card formCard"><h2>4. Pago, tasa y notas</h2><div className="grid2"><Field label="Forma de pago"><input value={invoice.paymentMethod} onChange={e => set('paymentMethod', e.target.value)} placeholder="Efectivo, transferencia, pago móvil…"/></Field><Field label="Moneda del documento"><select value={invoice.currency} onChange={e => set('currency', e.target.value)}><option>USD</option><option>EUR</option><option>VES</option><option>USDT</option><option>COP</option></select></Field><Field label="Descuento"><NumericInput label="Descuento" value={invoice.discount} onChange={value => set('discount', value)}/></Field><Field label="IVA / impuesto %"><NumericInput label="IVA / impuesto" value={invoice.taxRate} onChange={value => set('taxRate', value)}/></Field><Field label="Observaciones" wide><textarea rows={3} value={invoice.notes} onChange={e => set('notes', e.target.value)}/></Field></div>
         <div className="rateControls"><div className="rateControlsHead"><div><strong>Tasa de cobro / conversión</strong><small>La tasa queda congelada al guardar el documento.</small></div>{invoice.rateSource && invoice.rateSource !== 'none' && invoice.rateSource !== 'custom' && <button className="secondary" onClick={refreshRateForInvoice}>Actualizar tasa</button>}</div>
           <div className="grid2"><Field label="Referencia"><select value={invoice.rateSource || 'none'} onChange={e => void applyRate(e.target.value as RateSource)}><option value="none">Sin tasa de conversión</option><option value="bcv_usd">BCV dólar</option><option value="bcv_eur">BCV euro</option><option value="binance">Binance P2P / USDT</option><option value="usdt_average">Promedio USDT P2P</option><option value="custom">Tasa personalizada</option></select></Field>{invoice.rateSource === 'custom' && <Field label="Tasa personalizada (Bs por unidad)"><NumericInput label="Tasa personalizada" value={invoice.rateValue || 0} onChange={value => setInvoice(p => ({ ...p, rateValue: value, rateCapturedAt: new Date().toISOString() }))}/></Field>}</div>
-          {invoice.rateSource && invoice.rateSource !== 'none' && <div className="ratePreview"><div><span>Tasa aplicada</span><strong>{invoice.rateLabel || rateSourceLabels[invoice.rateSource]} · {formatRate(invoice.rateValue)}</strong></div>{equivalents?.ves != null && <div><span>Equivalente de pago</span><strong>{money(equivalents.ves, 'VES')}</strong></div>}{invoice.rateCapturedAt && <div><span>Capturada</span><strong>{new Date(invoice.rateCapturedAt).toLocaleString('es-VE')}</strong></div>}</div>}
-          {invoice.rateSource && invoice.rateSource !== 'none' && <label className="rateCheck"><input type="checkbox" checked={Boolean(invoice.showRateConversions)} onChange={e => set('showRateConversions', e.target.checked)}/><span>Mostrar en el PDF los equivalentes en VES, USD, EUR y USDT disponibles.</span></label>}
+          {invoice.rateSource && invoice.rateSource !== 'none' && <div className="ratePreview"><div><span>Tasa aplicada</span><strong>{invoice.rateLabel || rateSourceLabels[invoice.rateSource]} · {formatRate(invoice.rateValue)}</strong></div>{equivalents?.ves != null && <div><span>Equivalente base</span><strong>{money(equivalents.ves, 'VES')}</strong></div>}{invoice.rateCapturedAt && <div><span>Capturada</span><strong>{new Date(invoice.rateCapturedAt).toLocaleString('es-VE')}</strong></div>}</div>}
+          {invoice.rateSource && invoice.rateSource !== 'none' && <div className="pdfChoiceBlock"><div className="pdfChoiceHead"><div><strong>Equivalentes visibles en el PDF</strong><small>Marca solo las monedas que quieres que vea este cliente.</small></div><div className="miniActions"><button type="button" onClick={() => setAllConversions(true)}>Todos</button><button type="button" onClick={() => setAllConversions(false)}>Ninguno</button></div></div><div className="choiceGrid">{conversionOptions.map(option => { const unavailable = option.key !== 'VES' && conversionValue(option.key) == null; return <label className={`choiceChip ${unavailable ? 'disabled' : ''}`} key={option.key}><input type="checkbox" disabled={unavailable} checked={selectedConversions.includes(option.key)} onChange={() => toggleConversion(option.key)}/><span><strong>{option.label}</strong><small>{unavailable ? 'No disponible' : conversionValue(option.key) != null ? (option.key.startsWith('USDT') ? `${Number(conversionValue(option.key)).toLocaleString('es-VE', { maximumFractionDigits: 2 })} USDT` : money(Number(conversionValue(option.key)), option.key)) : ''}</small></span></label>})}</div></div>}
         </div>
+        <div className="pdfChoiceBlock paymentChoices"><div className="pdfChoiceHead"><div><strong>Métodos de pago visibles en el PDF</strong><small>Puedes mostrar varios métodos o dejar la factura sin datos de cobro.</small></div>{paymentOptions.length > 0 && <div className="miniActions"><button type="button" onClick={() => setInvoice(p => ({ ...p, paymentMethodsVisible: [...availablePayments] }))}>Todos</button><button type="button" onClick={() => setInvoice(p => ({ ...p, paymentMethodsVisible: [] }))}>Ninguno</button></div>}</div>{paymentOptions.length > 0 ? <div className="choiceGrid paymentGrid">{paymentOptions.map(option => <label className="choiceChip" key={option.key}><input type="checkbox" checked={selectedPayments.includes(option.key)} onChange={() => togglePayment(option.key)}/><span><strong>{option.label}</strong><small>{option.key === 'mobile' ? company.mobilePaymentBank || 'Configurado' : option.key === 'bank' ? company.bankName || 'Configurado' : option.key === 'binance' ? 'Pay ID / digital' : 'Texto adicional'}</small></span></label>)}</div> : <p className="emptyChoice">No hay métodos configurados. Agrégalos en Configuración → Datos de cobro.</p>}</div>
       </section>
     </section>
-    <aside className="summary card"><span>RESUMEN</span><Line label="Subtotal" value={money(sum.subtotal, invoice.currency)}/><Line label="Descuento" value={`- ${money(sum.discount, invoice.currency)}`}/><Line label={`Impuesto ${invoice.taxRate}%`} value={money(sum.tax, invoice.currency)}/><div className="total"><span>Total</span><strong>{money(sum.total, invoice.currency)}</strong></div>{invoice.rateValue && equivalents?.ves != null && <Line label={invoice.rateLabel || 'Equivalente'} value={money(equivalents.ves, 'VES')}/>} {invoice.id ? <button className="primary full" disabled={saving} onClick={() => save()}><Save size={18}/>{saving ? 'Guardando…' : 'Guardar cambios'}</button> : <button className="primary full" disabled={saving} onClick={() => save('issued')}><Check size={18}/>{saving ? 'Guardando…' : 'Guardar y emitir'}</button>}{invoice.status === 'issued' && <button className="secondary full" disabled={saving} onClick={() => save('paid')}><Check size={18}/>Marcar como pagada</button>}<button className="secondary full" disabled={saving} onClick={() => save('draft')}><Save size={18}/>Guardar borrador</button><hr/><button className="secondary full" onClick={share}><Share2 size={18}/>Compartir PDF</button><button className="secondary full whatsapp" onClick={whatsapp}><Send size={18}/>Enviar por WhatsApp</button><button className="secondary full" onClick={email}><Mail size={18}/>Preparar correo</button><button className="ghost full" onClick={download}><Download size={18}/>Descargar PDF</button><small>La tasa guardada en la factura no cambia aunque mañana se actualicen las referencias.</small></aside>
+    <aside className="summary card"><span>RESUMEN</span><Line label="Subtotal" value={money(sum.subtotal, invoice.currency)}/><Line label="Descuento" value={`- ${money(sum.discount, invoice.currency)}`}/><Line label={`Impuesto ${invoice.taxRate}%`} value={money(sum.tax, invoice.currency)}/><div className="total"><span>Total</span><strong>{money(sum.total, invoice.currency)}</strong></div>{invoice.rateValue && equivalents?.ves != null && <Line label={invoice.rateLabel || 'Equivalente'} value={money(equivalents.ves, 'VES')}/>} {invoice.id ? <button className="primary full" disabled={saving} onClick={() => save()}><Save size={18}/>{saving ? 'Guardando…' : 'Guardar cambios'}</button> : <button className="primary full" disabled={saving} onClick={() => save('issued')}><Check size={18}/>{saving ? 'Guardando…' : 'Guardar y emitir'}</button>}{invoice.status === 'issued' && <button className="secondary full" disabled={saving} onClick={() => save('paid')}><Check size={18}/>Marcar como pagada</button>}<button className="secondary full" disabled={saving} onClick={() => save('draft')}><Save size={18}/>Guardar borrador</button><hr/><button className="secondary full" onClick={share}><Share2 size={18}/>Compartir PDF</button><button className="secondary full whatsapp" onClick={whatsapp}><Send size={18}/>Enviar por WhatsApp</button><button className="secondary full" onClick={email}><Mail size={18}/>Preparar correo</button><button className="ghost full" onClick={download}><Download size={18}/>Descargar PDF</button><small>La tasa y las opciones visibles quedan guardadas con esta factura.</small></aside>
   </div>
 }
 
