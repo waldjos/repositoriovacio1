@@ -32,6 +32,15 @@ export const defaultCompany: Company = {
   defaultTaxRate: 0,
   nextInvoiceNumber: 1,
   prefix: 'FAC',
+  mobilePaymentBank: '',
+  mobilePaymentPhone: '',
+  mobilePaymentId: '',
+  bankName: '',
+  bankAccountType: '',
+  bankAccountNumber: '',
+  bankAccountHolder: '',
+  binanceId: '',
+  paymentNotes: '',
 }
 
 export async function ensureCompany() {
