@@ -14,6 +14,15 @@ export interface Company {
   nextInvoiceNumber: number
   prefix: string
   logoDataUrl?: string
+  mobilePaymentBank?: string
+  mobilePaymentPhone?: string
+  mobilePaymentId?: string
+  bankName?: string
+  bankAccountType?: string
+  bankAccountNumber?: string
+  bankAccountHolder?: string
+  binanceId?: string
+  paymentNotes?: string
 }
 
 export interface Client {
