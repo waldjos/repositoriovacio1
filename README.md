@@ -7,8 +7,11 @@ Desarrollada por **Zivi Dynamics C.A.** · RIF: **J-508175123** · https://zivid
 ## Funciones
 
 - Almacenamiento local con IndexedDB/Dexie.
+- Inicio de sesión con Google mediante Firebase Authentication.
+- Sincronización de empresa, facturas, clientes y productos con Cloud Firestore.
+- Aislamiento de datos por `uid`: cada cuenta de Google solo puede leer y escribir sus propios documentos.
+- Funcionamiento local-first: si no hay internet, se puede continuar trabajando y sincronizar al recuperar conexión.
 - Facturas, proformas y presupuestos.
-- Clientes y catálogo de productos/servicios.
 - Cálculo automático de subtotal, descuento, impuestos y total.
 - Generación de PDF en el dispositivo.
 - Compartir PDF con Web Share API, WhatsApp o correo.
@@ -18,6 +21,37 @@ Desarrollada por **Zivi Dynamics C.A.** · RIF: **J-508175123** · https://zivid
 - El respaldo automático adjunta el PDF de la factura y una copia JSON liviana de los datos locales. El logo se excluye de la copia automática para evitar superar los límites de tamaño del correo; el respaldo manual continúa incluyendo los datos locales completos.
 - Datos de empresa, logo, moneda, impuesto, numeración y datos de cobro configurables.
 - Pie de documento con la identificación de Zivi Dynamics C.A. y enlace a zividynamics.com.
+
+## Firebase: Google + Firestore
+
+1. Crear un proyecto en Firebase y registrar una aplicación Web.
+2. En **Authentication**, habilitar el proveedor **Google**.
+3. Crear una base **Cloud Firestore**.
+4. Publicar las reglas incluidas en `firestore.rules`.
+5. Configurar las siguientes variables en Vercel para Production, Preview y Development:
+
+```env
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+```
+
+Si estas variables todavía no existen, ZiviFactura continúa funcionando en modo local para no interrumpir el sistema actual. Cuando quedan configuradas, aparece la pantalla de acceso con Google.
+
+Estructura principal en Firestore:
+
+```text
+users/{uid}/company/main
+users/{uid}/invoices/{numeroFactura}
+users/{uid}/clients/{identificador}
+users/{uid}/products/{identificador}
+users/{uid}/meta/sync
+```
+
+La sincronización se ejecuta al iniciar sesión, al volver a tener conexión, al regresar a la aplicación y periódicamente mientras está abierta. Los datos existentes en el dispositivo se vinculan a la primera cuenta de Google que inicie sesión; si se cambia de cuenta en el mismo dispositivo, la base local se reinicia antes de descargar los datos de la nueva cuenta para evitar mezclar información entre usuarios.
 
 ## Respaldo automático por correo
 
@@ -47,4 +81,4 @@ npm run build
 npm run preview
 ```
 
-El proyecto genera una SPA estática compatible con Vercel y una función serverless para los respaldos por correo.
+El proyecto genera una SPA compatible con Vercel, sincronización opcional con Firebase y una función serverless para respaldos por correo.
