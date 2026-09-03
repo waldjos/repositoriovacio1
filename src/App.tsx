@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArchiveRestore, Calculator, Check, Copy, Download, Edit3, FilePlus2, FileText, Home, Mail, Plus, ReceiptText, Save, Search, Send, Settings, Share2, Trash2, Upload, WifiOff } from 'lucide-react'
 import { db, defaultCompany, ensureCompany, exportBackup, importBackup } from './db'
-import { buildInvoicePdf, money, pdfFile, totals } from './pdf'
+import { buildInvoicePdf, money, totals } from './pdf'
 import { appliedForInvoice, balanceForInvoice } from './payments'
+import { getActiveCompanyId } from './companyScope'
+import { publishPublicDocument, shareDocumentMessage } from './publicShare'
 import RatesView from './RatesView'
 import { fetchLiveRates, formatRate, getCachedRates, getRateValue, invoiceEquivalentValues, rateSourceLabels, refreshRatesIfDue } from './rates'
 import type { BackupData, Client, Company, ConversionTarget, Invoice, InvoiceItem, InvoiceStatus, Payment, PaymentDisplay, RateSnapshot, RateSource } from './types'
@@ -29,6 +31,7 @@ function availablePaymentMethods(c: Company): PaymentDisplay[] {
 function blank(c: Company): Invoice {
   const now = new Date().toISOString()
   return {
+    companyId: c.id,
     number: numberFor(c), type: 'Factura', status: 'draft', date: today(), dueDate: '', city: c.city || '',
     client: { name: '', taxId: '', phone: '', email: '', address: '' },
     items: [{ id: uid(), description: '', quantity: 1, unitPrice: 0 }], discount: 0,
@@ -78,14 +81,19 @@ export default function App() {
   const [online, setOnline] = useState(navigator.onLine)
   const [installPrompt, setInstallPrompt] = useState<InstallPrompt | null>(null)
 
-  const notify = (m: string) => { setToast(m); window.setTimeout(() => setToast(''), 2800) }
+  const notify = (m: string) => { setToast(m); window.setTimeout(() => setToast(''), 3200) }
 
   async function refresh() {
     await ensureCompany()
-    const [c, inv, pay, cl] = await Promise.all([
-      db.company.get(1), db.invoices.orderBy('updatedAt').reverse().toArray(), db.payments.orderBy('date').reverse().toArray(), db.clients.orderBy('name').toArray()
+    const companyId = getActiveCompanyId()
+    const [c, allInv, allPay, allClients] = await Promise.all([
+      db.company.get(companyId), db.invoices.orderBy('updatedAt').reverse().toArray(), db.payments.orderBy('date').reverse().toArray(), db.clients.orderBy('name').toArray()
     ])
-    setCompany(c ? { ...defaultCompany, ...c } : defaultCompany); setInvoices(inv); setPayments(pay); setClients(cl)
+    const active = c || await db.company.get(1)
+    setCompany(active ? { ...defaultCompany, ...active } : defaultCompany)
+    setInvoices(allInv.filter(row => (row.companyId || 1) === companyId))
+    setPayments(allPay.filter(row => (row.companyId || 1) === companyId))
+    setClients(allClients.filter(row => (row.companyId || 1) === companyId))
   }
 
   useEffect(() => {
@@ -123,7 +131,7 @@ export default function App() {
   const edit = (i: Invoice) => { setEditing(structuredClone(i)); setMode('editor') }
   const duplicate = (i: Invoice) => {
     const now = new Date().toISOString()
-    setEditing({ ...structuredClone(i), id: undefined, number: numberFor(company), status: 'draft', date: today(), createdAt: now, updatedAt: now, items: i.items.map(x => ({ ...x, id: uid() })) })
+    setEditing({ ...structuredClone(i), id: undefined, companyId: company.id, publicShareId: undefined, number: numberFor(company), status: 'draft', date: today(), createdAt: now, updatedAt: now, items: i.items.map(x => ({ ...x, id: uid() })) })
     setMode('editor')
   }
   const remove = async (i: Invoice) => {
@@ -255,40 +263,57 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
     setSaving(true)
     try {
       let existing: Client | undefined
-      if (invoice.client.taxId) existing = await db.clients.where('taxId').equals(invoice.client.taxId.trim()).first()
+      if (invoice.client.taxId) existing = clients.find(c => c.taxId === invoice.client.taxId.trim())
       if (!existing) existing = clients.find(c => c.name.toLowerCase() === invoice.client.name.trim().toLowerCase())
-      const clientPayload: Client = { ...invoice.client, id: existing?.id, createdAt: existing?.createdAt || new Date().toISOString() }
+      const clientPayload: Client = { ...invoice.client, companyId: company.id, id: existing?.id, createdAt: existing?.createdAt || new Date().toISOString() }
       const clientId = existing?.id ? (await db.clients.put(clientPayload), existing.id) : Number(await db.clients.add(clientPayload))
-      const payload: Invoice = { ...invoice, clientId, status: status ?? invoice.status, items: validItems, updatedAt: new Date().toISOString() }
+      const payload: Invoice = { ...invoice, companyId: company.id, clientId, status: status ?? invoice.status, items: validItems, updatedAt: new Date().toISOString() }
       let id = invoice.id
       if (id) await db.invoices.put(payload)
-      else { id = Number(await db.invoices.add(payload)); await db.company.update(1, { nextInvoiceNumber: (company.nextInvoiceNumber || 1) + 1 }) }
-      const saved = { ...payload, id }; setInvoice(saved); onSaved(saved)
+      else { id = Number(await db.invoices.add(payload)); await db.company.update(company.id, { nextInvoiceNumber: (company.nextInvoiceNumber || 1) + 1 }) }
+      const saved = { ...payload, id }
+      setInvoice(saved)
+      onSaved(saved)
+      if (saved.publicShareId) void publishPublicDocument(saved, company).catch(() => undefined)
     } finally { setSaving(false) }
   }
 
   const download = () => buildInvoicePdf(invoice, company).save(`${invoice.number}.pdf`)
-  const message = `Hola ${invoice.client.name}. Esta es tu ${invoice.type.toLowerCase()} ${invoice.number} por un monto total de ${money(sum.total, invoice.currency)}.\n\nAl final del PDF encontrarás el botón “ABRIR Y COPIAR DATOS”. Allí podrás copiar los datos bancarios o el método de pago habilitado para esta factura.\n\nDespués de realizar el pago, por favor carga el voucher o capture en esa misma pantalla para comprobar tu pago. Así podremos revisarlo, registrar el cobro y generar tu recibo.`
+  async function prepareLink() {
+    if (!invoice.id) throw new Error('Guarda el documento antes de compartirlo.')
+    const shared = await publishPublicDocument(invoice, company)
+    setInvoice(current => ({ ...current, publicShareId: shared.id }))
+    return shared
+  }
   const share = async () => {
     if (!invoice.client.name.trim()) return notify('Completa el cliente antes de compartir.')
-    const file = pdfFile(invoice, company)
-    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean }
-    if (navigator.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
-      try { await navigator.share({ title: `${invoice.type} ${invoice.number}`, text: message, files: [file] }) } catch { }
-    } else { download(); notify('PDF descargado. Puedes adjuntarlo manualmente.') }
+    try {
+      const shared = await prepareLink()
+      const message = shareDocumentMessage(invoice, shared.url, shared.total)
+      if (navigator.share) {
+        try { await navigator.share({ title: `${invoice.type} ${invoice.number}`, text: message, url: shared.url }); return } catch (error) { if (error instanceof DOMException && error.name === 'AbortError') return }
+      }
+      await navigator.clipboard?.writeText(message)
+      notify('Enlace copiado. Ya puedes enviarlo al cliente.')
+    } catch (error) { notify(error instanceof Error ? error.message : 'No se pudo crear el enlace.') }
   }
   const whatsapp = async () => {
     if (!invoice.client.name.trim()) return notify('Completa el cliente antes de compartir.')
-    const file = pdfFile(invoice, company)
-    const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean }
-    if (navigator.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
-      try { await navigator.share({ title: `${invoice.type} ${invoice.number}`, text: message, files: [file] }); return } catch (error) { if (error instanceof DOMException && error.name === 'AbortError') return }
-    }
-    const phone = invoice.client.phone.replace(/\D/g, '')
-    download(); window.open(phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
-    notify('Se descargó el PDF para que puedas adjuntarlo.')
+    try {
+      const shared = await prepareLink()
+      const message = shareDocumentMessage(invoice, shared.url, shared.total)
+      const phone = invoice.client.phone.replace(/\D/g, '')
+      window.open(phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+    } catch (error) { notify(error instanceof Error ? error.message : 'No se pudo crear el enlace.') }
   }
-  const email = () => { location.href = `mailto:${invoice.client.email}?subject=${encodeURIComponent(`${invoice.type} ${invoice.number}`)}&body=${encodeURIComponent(`${message}\n\nSaludos.`)}` }
+  const email = async () => {
+    if (!invoice.client.email.trim()) return notify('Agrega el correo del cliente antes de preparar el correo.')
+    try {
+      const shared = await prepareLink()
+      const message = shareDocumentMessage(invoice, shared.url, shared.total)
+      location.href = `mailto:${invoice.client.email}?subject=${encodeURIComponent(`${invoice.type} ${invoice.number}`)}&body=${encodeURIComponent(`${message}\n\nSaludos.`)}`
+    } catch (error) { notify(error instanceof Error ? error.message : 'No se pudo crear el enlace.') }
+  }
 
   const conversionOptions: Array<{ key: ConversionTarget; label: string }> = [
     { key: 'VES', label: 'Bolívares (VES)' },
@@ -329,10 +354,10 @@ function Editor({ invoice: initial, company, clients, notify, onBack, onSaved }:
           {invoice.rateSource && invoice.rateSource !== 'none' && <div className="ratePreview"><div><span>Tasa aplicada</span><strong>{invoice.rateLabel || rateSourceLabels[invoice.rateSource]} · {formatRate(invoice.rateValue)}</strong></div>{equivalents?.ves != null && <div><span>Equivalente base</span><strong>{money(equivalents.ves, 'VES')}</strong></div>}{invoice.rateCapturedAt && <div><span>Capturada</span><strong>{new Date(invoice.rateCapturedAt).toLocaleString('es-VE')}</strong></div>}</div>}
           {invoice.rateSource && invoice.rateSource !== 'none' && <div className="pdfChoiceBlock"><div className="pdfChoiceHead"><div><strong>Equivalentes visibles en el PDF</strong><small>Marca solo las monedas que quieres que vea este cliente.</small></div><div className="miniActions"><button type="button" onClick={() => setAllConversions(true)}>Todos</button><button type="button" onClick={() => setAllConversions(false)}>Ninguno</button></div></div><div className="choiceGrid">{conversionOptions.map(option => { const unavailable = option.key !== 'VES' && conversionValue(option.key) == null; return <label className={`choiceChip ${unavailable ? 'disabled' : ''}`} key={option.key}><input type="checkbox" disabled={unavailable} checked={selectedConversions.includes(option.key)} onChange={() => toggleConversion(option.key)}/><span><strong>{option.label}</strong><small>{unavailable ? 'No disponible' : conversionValue(option.key) != null ? (option.key.startsWith('USDT') ? `${Number(conversionValue(option.key)).toLocaleString('es-VE', { maximumFractionDigits: 2 })} USDT` : money(Number(conversionValue(option.key)), option.key)) : ''}</small></span></label>})}</div></div>}
         </div>
-        <div className="pdfChoiceBlock paymentChoices"><div className="pdfChoiceHead"><div><strong>Métodos de pago visibles en el PDF</strong><small>Puedes mostrar varios métodos o dejar la factura sin datos de cobro.</small></div>{paymentOptions.length > 0 && <div className="miniActions"><button type="button" onClick={() => setInvoice(p => ({ ...p, paymentMethodsVisible: [...availablePayments] }))}>Todos</button><button type="button" onClick={() => setInvoice(p => ({ ...p, paymentMethodsVisible: [] }))}>Ninguno</button></div>}</div>{paymentOptions.length > 0 ? <div className="choiceGrid paymentGrid">{paymentOptions.map(option => <label className="choiceChip" key={option.key}><input type="checkbox" checked={selectedPayments.includes(option.key)} onChange={() => togglePayment(option.key)}/><span><strong>{option.label}</strong><small>{option.key === 'mobile' ? company.mobilePaymentBank || 'Configurado' : option.key === 'bank' ? company.bankName || 'Configurado' : option.key === 'binance' ? 'Pay ID / digital' : 'Texto adicional'}</small></span></label>)}</div> : <p className="emptyChoice">No hay métodos configurados. Agrégalos en Configuración → Datos de cobro.</p>}</div>
+        <div className="pdfChoiceBlock paymentChoices"><div className="pdfChoiceHead"><div><strong>Métodos de pago visibles</strong><small>Estos datos aparecerán tanto en el PDF como en el enlace que recibe el cliente.</small></div>{paymentOptions.length > 0 && <div className="miniActions"><button type="button" onClick={() => setInvoice(p => ({ ...p, paymentMethodsVisible: [...availablePayments] }))}>Todos</button><button type="button" onClick={() => setInvoice(p => ({ ...p, paymentMethodsVisible: [] }))}>Ninguno</button></div>}</div>{paymentOptions.length > 0 ? <div className="choiceGrid paymentGrid">{paymentOptions.map(option => <label className="choiceChip" key={option.key}><input type="checkbox" checked={selectedPayments.includes(option.key)} onChange={() => togglePayment(option.key)}/><span><strong>{option.label}</strong><small>{option.key === 'mobile' ? company.mobilePaymentBank || 'Configurado' : option.key === 'bank' ? company.bankName || 'Configurado' : option.key === 'binance' ? 'Pay ID / digital' : 'Texto adicional'}</small></span></label>)}</div> : <p className="emptyChoice">No hay métodos configurados. Agrégalos en Configuración → Datos de cobro.</p>}</div>
       </section>
     </section>
-    <aside className="summary card"><span>RESUMEN</span><Line label="Subtotal" value={money(sum.subtotal, invoice.currency)}/><Line label="Descuento" value={`- ${money(sum.discount, invoice.currency)}`}/><Line label={`Impuesto ${invoice.taxRate}%`} value={money(sum.tax, invoice.currency)}/><div className="total"><span>Total</span><strong>{money(sum.total, invoice.currency)}</strong></div>{invoice.rateValue && equivalents?.ves != null && <Line label={invoice.rateLabel || 'Equivalente'} value={money(equivalents.ves, 'VES')}/>} {invoice.id ? <button className="primary full" disabled={saving} onClick={() => save()}><Save size={18}/>{saving ? 'Guardando…' : 'Guardar cambios'}</button> : <button className="primary full" disabled={saving} onClick={() => save('issued')}><Check size={18}/>{saving ? 'Guardando…' : 'Guardar y emitir'}</button>}{invoice.status === 'issued' && <button className="secondary full" disabled={saving} onClick={() => save('paid')}><Check size={18}/>Marcar como pagada</button>}<button className="secondary full" disabled={saving} onClick={() => save('draft')}><Save size={18}/>Guardar borrador</button><hr/><button className="secondary full" onClick={share}><Share2 size={18}/>Compartir PDF</button><button className="secondary full whatsapp" onClick={whatsapp}><Send size={18}/>Enviar por WhatsApp</button><button className="secondary full" onClick={email}><Mail size={18}/>Preparar correo</button><button className="ghost full" onClick={download}><Download size={18}/>Descargar PDF</button><small>La tasa y las opciones visibles quedan guardadas con esta factura.</small></aside>
+    <aside className="summary card"><span>RESUMEN</span><Line label="Subtotal" value={money(sum.subtotal, invoice.currency)}/><Line label="Descuento" value={`- ${money(sum.discount, invoice.currency)}`}/><Line label={`Impuesto ${invoice.taxRate}%`} value={money(sum.tax, invoice.currency)}/><div className="total"><span>Total</span><strong>{money(sum.total, invoice.currency)}</strong></div>{invoice.rateValue && equivalents?.ves != null && <Line label={invoice.rateLabel || 'Equivalente'} value={money(equivalents.ves, 'VES')}/>} {invoice.id ? <button className="primary full" disabled={saving} onClick={() => save()}><Save size={18}/>{saving ? 'Guardando…' : 'Guardar cambios'}</button> : <button className="primary full" disabled={saving} onClick={() => save('issued')}><Check size={18}/>{saving ? 'Guardando…' : 'Guardar y emitir'}</button>}{invoice.status === 'issued' && <button className="secondary full" disabled={saving} onClick={() => save('paid')}><Check size={18}/>Marcar como pagada</button>}<button className="secondary full" disabled={saving} onClick={() => save('draft')}><Save size={18}/>Guardar borrador</button><hr/><button className="secondary full" onClick={share}><Share2 size={18}/>Compartir enlace</button><button className="secondary full whatsapp" onClick={whatsapp}><Send size={18}/>Enviar link por WhatsApp</button><button className="secondary full" onClick={() => void email()}><Mail size={18}/>Preparar correo con link</button><button className="ghost full" onClick={download}><Download size={18}/>Descargar PDF</button><small>El enlace abre una página donde el cliente revisa el documento, copia los datos, paga, sube el voucher y puede descargar su PDF.</small></aside>
   </div>
 }
 
@@ -362,19 +387,19 @@ function SettingsView({ company, installPrompt, notify, onChanged, onInstalled }
   const [form, setForm] = useState<Company>({ ...defaultCompany, ...company })
   const fileRef = useRef<HTMLInputElement>(null)
   useEffect(() => setForm({ ...defaultCompany, ...company }), [company])
-  async function save() { await db.company.put({ ...defaultCompany, ...form, id: 1, nextInvoiceNumber: Math.max(1, Number(form.nextInvoiceNumber) || 1), defaultTaxRate: Math.max(0, Number(form.defaultTaxRate) || 0) }); await onChanged(); notify('Configuración guardada.') }
+  async function save() { await db.company.put({ ...defaultCompany, ...form, id: company.id, nextInvoiceNumber: Math.max(1, Number(form.nextInvoiceNumber) || 1), defaultTaxRate: Math.max(0, Number(form.defaultTaxRate) || 0) }); await onChanged(); notify('Configuración del negocio guardada.') }
   function logo(file?: File) { if (!file) return; if (!file.type.startsWith('image/')) return notify('Selecciona un archivo de imagen válido.'); if (file.size > MAX_LOGO_BYTES) return notify('Usa un logo de hasta 10 MB.'); const r = new FileReader(); r.onload = () => { setForm(p => ({ ...p, logoDataUrl: String(r.result) })); notify('Logo cargado.') }; r.readAsDataURL(file) }
   async function backup() { const data = await exportBackup(); const b = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = `zivifactura-backup-${today()}.json`; a.click(); URL.revokeObjectURL(u); notify('Respaldo exportado.') }
   async function restore(file?: File) { if (!file) return; try { const data = JSON.parse(await file.text()) as BackupData; if (!confirm('Esto reemplazará los datos locales actuales. ¿Continuar?')) return; await importBackup(data); await onChanged(); notify('Respaldo restaurado.') } catch { notify('El archivo de respaldo no es válido.') } }
   async function install() { if (!installPrompt) return notify('Usa “Agregar a pantalla de inicio” desde el menú del navegador.'); await installPrompt.prompt(); await installPrompt.userChoice; onInstalled() }
   async function persist() { if (!navigator.storage?.persist) return notify('Este navegador no ofrece esta función.'); notify(await navigator.storage.persist() ? 'Almacenamiento persistente activado.' : 'El navegador no concedió persistencia.') }
 
-  return <div className="settingsGrid"><section className="card formCard"><div className="cardHead"><div><h1>Configuración de empresa</h1><p>Define la identidad de tu negocio y los datos que verán tus clientes en cada documento.</p></div></div><div className="logoRow"><div className="logoPreview">{form.logoDataUrl ? <img src={form.logoDataUrl} alt="Logo"/> : <ReceiptText size={30}/>}</div><label className="secondary file"><Upload size={18}/>Subir logo<input type="file" accept="image/*" onChange={e => logo(e.target.files?.[0])}/></label><small>PNG, JPG o imagen compatible · máximo 10 MB</small></div><div className="grid2"><Field label="Empresa"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></Field><Field label="RIF / RUC"><input value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })}/></Field><Field label="Teléfono"><input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}/></Field><Field label="Correo"><input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}/></Field><Field label="Dirección" wide><input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}/></Field><Field label="Ciudad"><input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}/></Field><Field label="Moneda"><select value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })}><option>USD</option><option>EUR</option><option>VES</option><option>USDT</option><option>COP</option></select></Field><Field label="Impuesto predeterminado %"><NumericInput label="Impuesto predeterminado" value={form.defaultTaxRate} onChange={value => setForm({ ...form, defaultTaxRate: value })}/></Field><Field label="Prefijo"><input value={form.prefix} onChange={e => setForm({ ...form, prefix: e.target.value.toUpperCase().slice(0, 8) })}/></Field><Field label="Próximo número"><NumericInput label="Próximo número" value={form.nextInvoiceNumber} min={1} step="1" onChange={value => setForm({ ...form, nextInvoiceNumber: Math.round(value) })}/></Field></div>
-      <div className="settingsSection"><div className="sectionTitle"><span>DATOS DE COBRO</span><h2>Información para recibir pagos</h2><p>Completa únicamente los métodos que utilizas. Se mostrarán en la factura para que el cliente pueda pagar sin pedirte los datos por separado.</p></div>
+  return <div className="settingsGrid"><section className="card formCard"><div className="cardHead"><div><h1>Configuración de {company.name || 'negocio'}</h1><p>Cada negocio conserva su identidad, numeración y datos de cobro por separado.</p></div></div><div className="logoRow"><div className="logoPreview">{form.logoDataUrl ? <img src={form.logoDataUrl} alt="Logo"/> : <ReceiptText size={30}/>}</div><label className="secondary file"><Upload size={18}/>Subir logo<input type="file" accept="image/*" onChange={e => logo(e.target.files?.[0])}/></label><small>PNG, JPG o imagen compatible · máximo 10 MB</small></div><div className="grid2"><Field label="Empresa / negocio"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></Field><Field label="RIF / RUC"><input value={form.taxId} onChange={e => setForm({ ...form, taxId: e.target.value })}/></Field><Field label="Teléfono"><input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}/></Field><Field label="Correo"><input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}/></Field><Field label="Dirección" wide><input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })}/></Field><Field label="Ciudad"><input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}/></Field><Field label="Moneda"><select value={form.currency} onChange={e => setForm({ ...form, currency: e.target.value })}><option>USD</option><option>EUR</option><option>VES</option><option>USDT</option><option>COP</option></select></Field><Field label="Impuesto predeterminado %"><NumericInput label="Impuesto predeterminado" value={form.defaultTaxRate} onChange={value => setForm({ ...form, defaultTaxRate: value })}/></Field><Field label="Prefijo"><input value={form.prefix} onChange={e => setForm({ ...form, prefix: e.target.value.toUpperCase().slice(0, 8) })}/></Field><Field label="Próximo número"><NumericInput label="Próximo número" value={form.nextInvoiceNumber} min={1} step="1" onChange={value => setForm({ ...form, nextInvoiceNumber: Math.round(value) })}/></Field></div>
+      <div className="settingsSection"><div className="sectionTitle"><span>DATOS DE COBRO</span><h2>Información para recibir pagos</h2><p>Completa únicamente los métodos que utiliza este negocio. El cliente los verá en su enlace de pago y en el PDF.</p></div>
         <div className="paymentGroup"><h3>Pago móvil</h3><div className="grid2"><Field label="Banco"><input value={form.mobilePaymentBank || ''} onChange={e => setForm({ ...form, mobilePaymentBank: e.target.value })} placeholder="Ej. Banesco"/></Field><Field label="Teléfono"><input value={form.mobilePaymentPhone || ''} onChange={e => setForm({ ...form, mobilePaymentPhone: e.target.value })} placeholder="0412..."/></Field><Field label="Cédula / RIF" wide><input value={form.mobilePaymentId || ''} onChange={e => setForm({ ...form, mobilePaymentId: e.target.value })}/></Field></div></div>
         <div className="paymentGroup"><h3>Cuenta bancaria</h3><div className="grid2"><Field label="Banco"><input value={form.bankName || ''} onChange={e => setForm({ ...form, bankName: e.target.value })}/></Field><Field label="Tipo de cuenta"><input value={form.bankAccountType || ''} onChange={e => setForm({ ...form, bankAccountType: e.target.value })} placeholder="Corriente / Ahorro"/></Field><Field label="Número de cuenta" wide><input value={form.bankAccountNumber || ''} onChange={e => setForm({ ...form, bankAccountNumber: e.target.value })}/></Field><Field label="Titular" wide><input value={form.bankAccountHolder || ''} onChange={e => setForm({ ...form, bankAccountHolder: e.target.value })}/></Field></div></div>
         <div className="paymentGroup"><h3>Binance / pagos digitales</h3><div className="grid2"><Field label="Binance Pay ID / correo" wide><input value={form.binanceId || ''} onChange={e => setForm({ ...form, binanceId: e.target.value })} placeholder="Pay ID, correo o identificador"/></Field><Field label="Instrucciones adicionales" wide><textarea rows={3} value={form.paymentNotes || ''} onChange={e => setForm({ ...form, paymentNotes: e.target.value })} placeholder="Zelle, USDT, referencia, instrucciones para el cliente…"/></Field></div></div>
       </div><button className="primary saveSettings" onClick={save}><Save size={18}/>Guardar configuración</button></section>
-    <aside className="tools"><section className="card tool"><ArchiveRestore/><h2>Copia de seguridad</h2><p>Exporta facturas, clientes y configuración a un archivo JSON.</p><button className="secondary full" onClick={backup}><Download size={18}/>Exportar respaldo</button><button className="secondary full" onClick={() => fileRef.current?.click()}><ArchiveRestore size={18}/>Restaurar respaldo</button><input ref={fileRef} hidden type="file" accept="application/json" onChange={e => restore(e.target.files?.[0])}/></section><section className="card tool"><Download/><h2>Instalar PWA</h2><p>Agrega la aplicación a la pantalla de inicio y úsala como una app.</p><button className="primary full" onClick={install}><Download size={18}/>Instalar</button></section><section className="card tool"><Save/><h2>Conservar datos</h2><p>Solicita prioridad para que el navegador no elimine el almacenamiento local automáticamente.</p><button className="secondary full" onClick={persist}><Check size={18}/>Solicitar persistencia</button></section></aside>
+    <aside className="tools"><section className="card tool"><ArchiveRestore/><h2>Copia de seguridad</h2><p>Exporta todos tus negocios, facturas, clientes y cobros a un archivo JSON.</p><button className="secondary full" onClick={backup}><Download size={18}/>Exportar respaldo</button><button className="secondary full" onClick={() => fileRef.current?.click()}><ArchiveRestore size={18}/>Restaurar respaldo</button><input ref={fileRef} hidden type="file" accept="application/json" onChange={e => restore(e.target.files?.[0])}/></section><section className="card tool"><Download/><h2>Instalar PWA</h2><p>Agrega la aplicación a la pantalla de inicio y úsala como una app.</p><button className="primary full" onClick={install}><Download size={18}/>Instalar</button></section><section className="card tool"><Save/><h2>Conservar datos</h2><p>Solicita prioridad para que el navegador no elimine el almacenamiento local automáticamente.</p><button className="secondary full" onClick={persist}><Check size={18}/>Solicitar persistencia</button></section></aside>
   </div>
 }
