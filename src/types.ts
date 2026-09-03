@@ -44,6 +44,7 @@ export interface Company {
 
 export interface Client {
   id?: number
+  companyId?: number
   name: string
   taxId: string
   phone: string
@@ -54,6 +55,7 @@ export interface Client {
 
 export interface Product {
   id?: number
+  companyId?: number
   name: string
   price: number
   description?: string
@@ -69,6 +71,8 @@ export interface InvoiceItem {
 
 export interface Invoice {
   id?: number
+  companyId?: number
+  publicShareId?: string
   number: string
   type: InvoiceType
   status: InvoiceStatus
@@ -76,7 +80,7 @@ export interface Invoice {
   dueDate: string
   city: string
   clientId?: number
-  client: Omit<Client, 'id' | 'createdAt'>
+  client: Omit<Client, 'id' | 'createdAt' | 'companyId'>
   items: InvoiceItem[]
   discount: number
   taxRate: number
@@ -97,6 +101,7 @@ export interface Invoice {
 
 export interface Payment {
   id?: number
+  companyId?: number
   key: string
   invoiceNumber: string
   invoiceCurrency: string
@@ -115,7 +120,7 @@ export interface Payment {
 }
 
 export interface BackupData {
-  version: 1 | 2
+  version: 1 | 2 | 3
   exportedAt: string
   company: Company[]
   clients: Client[]
