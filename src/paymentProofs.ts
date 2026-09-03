@@ -8,6 +8,8 @@ export interface PaymentProofSubmission {
   id: string
   ownerUid: string
   submitterUid: string
+  shareId?: string
+  companyId?: number
   invoiceNumber: string
   clientName: string
   amountPaid: number
