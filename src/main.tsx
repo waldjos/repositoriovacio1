@@ -5,6 +5,7 @@ import { initAutomaticBackup } from './cloudBackup'
 import './styles.css'
 import './payments.css'
 import './proofs.css'
+import './business.css'
 
 initAutomaticBackup()
 
