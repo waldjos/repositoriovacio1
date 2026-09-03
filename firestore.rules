@@ -5,12 +5,29 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    match /publicDocuments/{shareId} {
+      allow read: if resource.data.active == true;
+      allow create: if request.auth != null
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.active == true
+        && request.resource.data.invoiceNumber is string
+        && request.resource.data.invoiceNumber.size() > 0;
+      allow update, delete: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid;
+    }
+
     match /paymentProofs/{ownerUid}/submissions/{submissionId} {
       allow create: if request.auth != null
         && request.auth.token.firebase.sign_in_provider == 'anonymous'
         && request.resource.data.ownerUid == ownerUid
         && request.resource.data.submitterUid == request.auth.uid
         && request.resource.data.status == 'pending'
+        && request.resource.data.shareId is string
+        && exists(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId))
+        && get(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId)).data.active == true
+        && get(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId)).data.ownerUid == ownerUid
+        && get(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId)).data.invoiceNumber == request.resource.data.invoiceNumber
         && request.resource.data.invoiceNumber is string
         && request.resource.data.invoiceNumber.size() > 0
         && request.resource.data.invoiceNumber.size() <= 80
