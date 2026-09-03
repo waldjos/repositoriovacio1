@@ -12,9 +12,11 @@ service cloud.firestore {
         && request.resource.data.active == true
         && request.resource.data.invoiceNumber is string
         && request.resource.data.invoiceNumber.size() > 0;
-      allow update, delete: if request.auth != null
+      allow update: if request.auth != null
         && resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid;
     }
 
     match /paymentProofs/{ownerUid}/submissions/{submissionId} {
@@ -23,11 +25,6 @@ service cloud.firestore {
         && request.resource.data.ownerUid == ownerUid
         && request.resource.data.submitterUid == request.auth.uid
         && request.resource.data.status == 'pending'
-        && request.resource.data.shareId is string
-        && exists(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId))
-        && get(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId)).data.active == true
-        && get(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId)).data.ownerUid == ownerUid
-        && get(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId)).data.invoiceNumber == request.resource.data.invoiceNumber
         && request.resource.data.invoiceNumber is string
         && request.resource.data.invoiceNumber.size() > 0
         && request.resource.data.invoiceNumber.size() <= 80
@@ -42,7 +39,17 @@ service cloud.firestore {
         && request.resource.data.size > 0
         && request.resource.data.size <= 550000
         && request.resource.data.storagePath is string
-        && request.resource.data.storagePath.size() <= 300;
+        && request.resource.data.storagePath.size() <= 300
+        && (
+          !request.resource.data.keys().hasAny(['shareId'])
+          || (
+            request.resource.data.shareId is string
+            && exists(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId))
+            && get(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId)).data.active == true
+            && get(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId)).data.ownerUid == ownerUid
+            && get(/databases/$(database)/documents/publicDocuments/$(request.resource.data.shareId)).data.invoiceNumber == request.resource.data.invoiceNumber
+          )
+        );
 
       allow read, update, delete: if request.auth != null && request.auth.uid == ownerUid;
     }
