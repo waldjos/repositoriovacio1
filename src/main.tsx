@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import AuthShell from './AuthShell'
+import QuickTools from './QuickTools'
 import { initAutomaticBackup } from './cloudBackup'
 import './styles.css'
 import './payments.css'
@@ -12,6 +13,7 @@ initAutomaticBackup()
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthShell />
+    <QuickTools />
   </React.StrictMode>,
 )
 
