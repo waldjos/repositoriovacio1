@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BarChart3, Calculator, CircleDollarSign, RefreshCw, WalletCards } from 'lucide-react'
 import { db } from './db'
+import { getActiveCompanyId } from './companyScope'
 import { money, totals } from './pdf'
 import { fetchLiveRates, getCachedRates, pivotConversions, refreshRatesIfDue } from './rates'
 import { appliedForInvoice, balanceForInvoice, legacyPaymentMethod, paymentMethodLabels, currentRateForCurrency } from './payments'
@@ -59,6 +60,7 @@ function formatNumber(value?: number, suffix = '') {
 }
 
 export default function AdminDashboard({ view }: { view: AdminView }) {
+  const companyId = getActiveCompanyId()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [rates, setRates] = useState<RateSnapshot | null>(getCachedRates())
@@ -73,8 +75,8 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
         db.payments.orderBy('date').reverse().toArray(),
         forceRates ? fetchLiveRates(true).catch(() => getCachedRates()) : refreshRatesIfDue(),
       ])
-      setInvoices(invoiceRows)
-      setPayments(paymentRows)
+      setInvoices(invoiceRows.filter(row => (row.companyId || 1) === companyId))
+      setPayments(paymentRows.filter(row => (row.companyId || 1) === companyId))
       if (nextRates) setRates(nextRates)
     } finally {
       setLoading(false)
@@ -177,7 +179,7 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
 
   return <main className="adminPage">
     <section className="adminHero">
-      <div><span>ZIVIFACTURA · ADMINISTRACIÓN</span><h1>{view === 'income' ? 'Ingresos y equivalentes' : 'Estadísticas de cobro'}</h1><p>{view === 'income' ? 'Los ingresos se calculan desde cada cobro o abono registrado, usando la fecha y la tasa real de ese movimiento. Cada abono también reduce automáticamente la cuenta por cobrar de su factura.' : 'Analiza cuántos pagos recibiste por cada método y cuánto representaron en bolívares.'}</p></div>
+      <div><span>ZIVIFACTURA · ADMINISTRACIÓN</span><h1>{view === 'income' ? 'Ingresos y equivalentes' : 'Estadísticas de cobro'}</h1><p>{view === 'income' ? 'Los ingresos se calculan desde cada cobro o abono registrado en el negocio activo. Cada abono también reduce automáticamente su cuenta por cobrar.' : 'Analiza los cobros del negocio activo por método de pago y equivalente en bolívares.'}</p></div>
       <button className="secondary" disabled={loading} onClick={() => void load(true)}><RefreshCw size={17} className={loading ? 'spin' : ''}/>{loading ? 'Actualizando…' : 'Actualizar datos'}</button>
     </section>
 
@@ -239,6 +241,6 @@ export default function AdminDashboard({ view }: { view: AdminView }) {
       <section className="card adminCard"><div className="adminCardHead"><div><span>DISTRIBUCIÓN</span><h2>Participación por número de operaciones</h2></div></div><div className="distributionList">{summary.paymentsByMethod.map(item => { const pct = movements.length ? (item.count / movements.length) * 100 : 0; return <div key={item.key}><span>{item.label}</span><div><i style={{ width: `${pct}%` }}/></div><strong>{pct.toFixed(1)}%</strong></div>})}</div><p className="adminNote">Pago móvil, transferencia, Binance/USDT, efectivo, Zelle y tarjeta/POS quedan normalizados desde el momento de registrar el cobro.</p></section>
     </>}
 
-    <p className="adminFootnote">Los reportes administrativos se construyen con el libro de caja de ZiviFactura. No sustituyen una conciliación bancaria o contable formal.</p>
+    <p className="adminFootnote">Los reportes administrativos se construyen con el libro de caja de ZiviFactura del negocio activo. No sustituyen una conciliación bancaria o contable formal.</p>
   </main>
 }
