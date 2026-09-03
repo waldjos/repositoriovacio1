@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Clock3, DollarSign, RefreshCw, TrendingUp, WalletCards } from 'lucide-react'
 import { db } from './db'
+import { getActiveCompanyId } from './companyScope'
 import { money, totals } from './pdf'
 import { balanceForInvoice, currentReceivableRate, appliedForInvoice, receivableBalanceVes, paymentMethodLabels } from './payments'
 import { fetchLiveRates, getCachedRates, pivotConversions, rateSourceLabels, refreshRatesIfDue } from './rates'
@@ -35,6 +36,7 @@ function rateLabel(invoice: Invoice) {
 }
 
 export default function ReceivablesView() {
+  const companyId = getActiveCompanyId()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [rates, setRates] = useState<RateSnapshot | null>(getCachedRates())
@@ -48,8 +50,8 @@ export default function ReceivablesView() {
         db.payments.toArray(),
         forceRates ? fetchLiveRates(true).catch(() => getCachedRates()) : refreshRatesIfDue(),
       ])
-      setInvoices(invoiceRows)
-      setPayments(paymentRows)
+      setInvoices(invoiceRows.filter(row => (row.companyId || 1) === companyId))
+      setPayments(paymentRows.filter(row => (row.companyId || 1) === companyId))
       if (nextRates) setRates(nextRates)
     } finally {
       setLoading(false)
@@ -112,7 +114,7 @@ export default function ReceivablesView() {
 
   return <main className="receivablesPage">
     <section className="receivablesHero">
-      <div><span>ZIVIFACTURA · CUENTAS POR COBRAR</span><h1>Mantén la deuda en dólares y mira cuánto representa hoy en bolívares.</h1><p>El monto original de cada factura nunca se altera. Cada abono queda en el historial y se resta automáticamente del saldo pendiente antes de calcular su valoración actual.</p></div>
+      <div><span>ZIVIFACTURA · CUENTAS POR COBRAR</span><h1>Mantén la deuda en dólares y mira cuánto representa hoy en bolívares.</h1><p>El monto original de cada factura nunca se altera. Cada abono del negocio activo queda en el historial y se resta automáticamente antes de calcular la valoración actual.</p></div>
       <button className="secondary" disabled={loading} onClick={() => void load(true)}><RefreshCw size={17} className={loading ? 'spin' : ''}/>{loading ? 'Actualizando…' : 'Actualizar valoración'}</button>
     </section>
 
@@ -143,9 +145,9 @@ export default function ReceivablesView() {
           <div className="receivableToday"><span>Valor hoy</span><strong>{row.rate ? money(row.ves, 'VES') : 'Sin tasa'}</strong><small>{rateLabel(row.invoice)}{row.rate ? ` · ${row.rate.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Bs` : ''}</small></div>
         </div>
         {row.history.length > 0 && <div className="receivableHistory"><div className="receivableHistoryTitle"><strong>Historial de abonos</strong><span>{row.history.length} movimiento{row.history.length === 1 ? '' : 's'}</span></div>{row.history.map(({ payment, before, after }) => <div className="receivableHistoryRow" key={payment.key}><div><strong>{payment.date}</strong><span>{paymentMethodLabels[payment.method]}{payment.reference ? ` · Ref. ${payment.reference}` : ''}</span></div><div><span>Abono</span><strong>- {money(payment.amountApplied, row.invoice.currency)}</strong></div><div><span>Saldo</span><strong>{money(after, row.invoice.currency)}</strong><small>Antes: {money(before, row.invoice.currency)}</small></div></div>)}</div>}
-      </article>)}</div> : <div className="adminEmpty">No tienes facturas pendientes por cobrar.</div>}
+      </article>)}</div> : <div className="adminEmpty">No tienes facturas pendientes por cobrar en este negocio.</div>}
     </section>
 
-    <p className="adminFootnote">Esta pantalla es una valoración administrativa dinámica de cuentas por cobrar. No reescribe el monto ni la tasa congelada dentro del PDF emitido.</p>
+    <p className="adminFootnote">Esta pantalla muestra únicamente la cartera del negocio activo y no reescribe el monto ni la tasa congelada dentro del documento emitido.</p>
   </main>
 }
