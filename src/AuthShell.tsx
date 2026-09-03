@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { BarChart3, CheckCircle2, Cloud, CloudOff, DollarSign, Eye, EyeOff, LogOut, Mail, ReceiptText, RefreshCw, ShieldCheck, UserPlus, Wallet, WalletCards } from 'lucide-react'
+import { BarChart3, Building2, CheckCircle2, Cloud, CloudOff, DollarSign, Eye, EyeOff, LogOut, Mail, Plus, ReceiptText, RefreshCw, ShieldCheck, UserPlus, Wallet, WalletCards } from 'lucide-react'
 import AdminDashboard from './AdminDashboard'
 import App from './App'
 import PaymentsView from './PaymentsView'
 import ReceivablesView from './ReceivablesView'
-import { db, defaultCompany, ensureCompany } from './db'
+import { createCompany, db, defaultCompany, ensureCompany } from './db'
+import { getActiveCompanyId, setActiveCompanyId } from './companyScope'
 import { createEmailAccount, firebaseConfigured, isPasswordAccount, observeAuth, refreshAccountVerification, requestPasswordReset, sendAccountVerification, signInWithEmail, signInWithGoogle, signOutFirebase, type FirebaseUser } from './firebase'
 import { startFirebaseSync, syncFirebaseNow, type SyncState } from './firebaseSync'
+import type { Company } from './types'
 import './auth.css'
 import './admin.css'
 
@@ -27,6 +29,7 @@ async function prepareLocalAccount(uid: string) {
       ])
     })
     await ensureCompany()
+    setActiveCompanyId(1)
   }
   localStorage.setItem(LOCAL_UID_KEY, uid)
 }
@@ -151,6 +154,7 @@ function LoginScreen({ onLocal }: { onLocal: () => void }) {
         binanceId: signup.binanceId.trim(),
         paymentNotes: signup.paymentNotes.trim(),
       })
+      setActiveCompanyId(1)
       await sendAccountVerification(credential.user).catch(() => undefined)
     } catch (err) {
       setError(authError(err))
@@ -297,9 +301,52 @@ function AccountBar({ user, state, message, onLogout }: { user: FirebaseUser; st
   </div>
 }
 
+function BusinessSwitcher() {
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [activeId, setActiveIdState] = useState(getActiveCompanyId())
+
+  async function load() {
+    await ensureCompany()
+    const rows = (await db.company.toArray()).sort((a, b) => a.id - b.id)
+    setCompanies(rows)
+    if (!rows.some(row => row.id === activeId)) {
+      setActiveIdState(1)
+      setActiveCompanyId(1)
+    }
+  }
+
+  useEffect(() => {
+    void load()
+    const timer = window.setTimeout(() => void load(), 1800)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  function change(id: number) {
+    if (!id || id === activeId) return
+    setActiveCompanyId(id)
+    setActiveIdState(id)
+    window.location.reload()
+  }
+
+  async function addBusiness() {
+    const name = window.prompt('Nombre del nuevo negocio o empresa:')?.trim()
+    if (!name) return
+    const company = await createCompany(name)
+    setActiveCompanyId(company.id)
+    window.location.reload()
+  }
+
+  return <div className="businessSwitcher">
+    <Building2 size={16}/><span>Negocio</span>
+    <select aria-label="Negocio activo" value={activeId} onChange={event => change(Number(event.target.value))}>{companies.map(company => <option key={company.id} value={company.id}>{company.name || `Negocio ${company.id}`}</option>)}</select>
+    <button title="Agregar otro negocio" onClick={() => void addBusiness()}><Plus size={16}/><span>Agregar</span></button>
+  </div>
+}
+
 function WorkspaceShell() {
   const [workspace, setWorkspace] = useState<Workspace>('billing')
   return <>
+    <div className="businessBar"><BusinessSwitcher/></div>
     <nav className="workspaceNav" aria-label="Áreas administrativas">
       <button className={workspace === 'billing' ? 'active' : ''} onClick={() => setWorkspace('billing')}><ReceiptText size={17}/>Facturación</button>
       <button className={workspace === 'receivables' ? 'active' : ''} onClick={() => setWorkspace('receivables')}><DollarSign size={17}/>Por cobrar</button>
