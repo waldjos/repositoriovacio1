@@ -8,11 +8,20 @@ import { publishPublicDocument, shareDocumentMessage } from './publicShare'
 import RatesView from './RatesView'
 import { fetchLiveRates, formatRate, getCachedRates, getRateValue, invoiceEquivalentValues, rateSourceLabels, refreshRatesIfDue } from './rates'
 import type { BackupData, Client, Company, ConversionTarget, Invoice, InvoiceItem, InvoiceStatus, Payment, PaymentDisplay, RateSnapshot, RateSource } from './types'
+import './home.css'
 
 type Mode = 'home' | 'editor' | 'rates' | 'settings'
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> }
+type HomeStatusFilter = 'all' | InvoiceStatus
 
 const labels: Record<InvoiceStatus, string> = { draft: 'Borrador', issued: 'Por cobrar', paid: 'Pagada', cancelled: 'Anulada' }
+const homeStatusOrder: InvoiceStatus[] = ['issued', 'draft', 'paid', 'cancelled']
+const homeStatusInfo: Record<InvoiceStatus, { title: string; hint: string }> = {
+  issued: { title: 'Por cobrar', hint: 'Pendientes de cobro y saldos abiertos' },
+  draft: { title: 'Borradores', hint: 'Documentos que todavía no has emitido' },
+  paid: { title: 'Pagadas', hint: 'Documentos cobrados o con saldo cancelado' },
+  cancelled: { title: 'Anuladas', hint: 'Documentos que ya no forman parte del cobro' },
+}
 const today = () => new Date().toISOString().slice(0, 10)
 const uid = () => Math.random().toString(36).slice(2, 10)
 const numberFor = (c: Company) => `${c.prefix || 'FAC'}-${String(c.nextInvoiceNumber || 1).padStart(6, '0')}`
@@ -172,24 +181,54 @@ function HomeView({ invoices, all, payments, search, setSearch, onNew, onEdit, o
   invoices: Invoice[]; all: Invoice[]; payments: Payment[]; search: string; setSearch: (v: string) => void;
   onNew: () => void; onEdit: (i: Invoice) => void; onDuplicate: (i: Invoice) => void; onDelete: (i: Invoice) => void; onStatusChange: (i: Invoice, status: InvoiceStatus) => void
 }) {
+  const [statusFilter, setStatusFilter] = useState<HomeStatusFilter>('all')
   const pending = pendingByCurrency(all, payments)
   const paid = collectedByCurrency(all, payments)
+  const counts = useMemo(() => ({
+    all: all.length,
+    issued: all.filter(item => item.status === 'issued').length,
+    draft: all.filter(item => item.status === 'draft').length,
+    paid: all.filter(item => item.status === 'paid').length,
+    cancelled: all.filter(item => item.status === 'cancelled').length,
+  }), [all])
+  const statusesToShow = statusFilter === 'all' ? homeStatusOrder : [statusFilter]
+  const grouped = statusesToShow.map(status => ({ status, rows: invoices.filter(item => item.status === status) }))
+  const totalVisible = grouped.reduce((sum, group) => sum + group.rows.length, 0)
+  const tabs: Array<{ key: HomeStatusFilter; label: string; count: number }> = [
+    { key: 'all', label: 'Resumen', count: counts.all },
+    { key: 'issued', label: 'Por cobrar', count: counts.issued },
+    { key: 'draft', label: 'Borradores', count: counts.draft },
+    { key: 'paid', label: 'Pagadas', count: counts.paid },
+    { key: 'cancelled', label: 'Anuladas', count: counts.cancelled },
+  ]
+
+  const invoiceRow = (i: Invoice) => {
+    const applied = appliedForInvoice(i.number, payments)
+    const balance = balanceForInvoice(i, payments)
+    const visibleAmount = i.status === 'issued' ? balance : totals(i).total
+    return <article className="row" key={i.id || i.number}>
+      <button className="doc" onClick={() => onEdit(i)}><span className="fileIcon"><FileText size={19}/></span><span><strong>{i.number}</strong><small>{i.client.name || 'Sin cliente'} · {i.date}{applied > 0 ? ` · Abonado ${money(applied, i.currency)}` : i.rateLabel ? ` · ${i.rateLabel}` : ''}</small></span></button>
+      <span className={`status ${i.status}`}>{labels[i.status]}</span><strong className="amount">{i.status === 'issued' ? `Saldo ${money(visibleAmount, i.currency)}` : money(visibleAmount, i.currency)}</strong>
+      <div className="actions">{i.status === 'issued' && <button title="Marcar como pagada" onClick={() => onStatusChange(i, 'paid')}><Check size={17}/></button>}<button title="Editar" onClick={() => onEdit(i)}><Edit3 size={17}/></button><button title="Duplicar" onClick={() => onDuplicate(i)}><Copy size={17}/></button><button title="Eliminar" className="danger" onClick={() => onDelete(i)}><Trash2 size={17}/></button></div>
+    </article>
+  }
+
   return <>
     <section className="hero"><div><span>ZIVI FACTURA · CONTROL ADMINISTRATIVO</span><h1>Presupuesta, factura y cobra con una imagen profesional.</h1><p>Crea documentos, controla cuentas por cobrar y trabaja con tasas BCV, euro y USDT desde el mismo sistema.</p></div><button className="heroButton" onClick={onNew}><FilePlus2 size={20}/>Crear documento</button></section>
     <section className="metrics"><Metric label="Documentos" value={String(all.length)}/><Metric label="Por cobrar · saldo real" value={pending}/><Metric label="Cobrado · movimientos" value={paid}/></section>
-    <section className="card">
-      <div className="cardHead"><div><h2>Facturas y documentos</h2><p>El saldo visible se actualiza con cada abono registrado en Cobros / Caja.</p></div><button className="primary" onClick={onNew}><Plus size={18}/>Nuevo</button></div>
+    <section className="card documentBoard">
+      <div className="documentBoardIntro"><div><h2>Facturas y documentos</h2><p>Ahora están separados por estado para que identifiques primero lo que requiere atención y no se mezclen borradores, cuentas pendientes y documentos ya pagados.</p></div><button className="primary" onClick={onNew}><Plus size={18}/>Nuevo</button></div>
+      <div className="documentTabs" role="tablist" aria-label="Estado de documentos">{tabs.map(tab => <button key={tab.key} type="button" className={statusFilter === tab.key ? 'active' : ''} onClick={() => setStatusFilter(tab.key)}><span>{tab.label}</span><b>{tab.count}</b></button>)}</div>
+      <div className="documentFilterNote"><ReceiptText size={15}/><span>{statusFilter === 'all' ? 'En Resumen se muestran primero Por cobrar y Borradores; Pagadas y Anuladas quedan en bloques separados.' : `${tabs.find(tab => tab.key === statusFilter)?.label}: ${tabs.find(tab => tab.key === statusFilter)?.count || 0} documento(s) en este negocio.`}</span></div>
       <label className="search"><Search size={18}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por cliente, número, fecha o estado…"/></label>
-      {invoices.length ? <div className="list">{invoices.map(i => {
-        const applied = appliedForInvoice(i.number, payments)
-        const balance = balanceForInvoice(i, payments)
-        const visibleAmount = i.status === 'issued' ? balance : totals(i).total
-        return <article className="row" key={i.id}>
-          <button className="doc" onClick={() => onEdit(i)}><span className="fileIcon"><FileText size={19}/></span><span><strong>{i.number}</strong><small>{i.client.name || 'Sin cliente'} · {i.date}{applied > 0 ? ` · Abonado ${money(applied, i.currency)}` : i.rateLabel ? ` · ${i.rateLabel}` : ''}</small></span></button>
-          <span className={`status ${i.status}`}>{labels[i.status]}</span><strong className="amount">{i.status === 'issued' ? `Saldo ${money(visibleAmount, i.currency)}` : money(visibleAmount, i.currency)}</strong>
-          <div className="actions">{i.status === 'issued' && <button title="Marcar como pagada" onClick={() => onStatusChange(i, 'paid')}><Check size={17}/></button>}<button title="Editar" onClick={() => onEdit(i)}><Edit3 size={17}/></button><button title="Duplicar" onClick={() => onDuplicate(i)}><Copy size={17}/></button><button title="Eliminar" className="danger" onClick={() => onDelete(i)}><Trash2 size={17}/></button></div>
-        </article>
-      })}</div> : <div className="empty"><ReceiptText size={34}/><h3>{search ? 'Sin resultados' : 'Aún no hay facturas'}</h3><p>{search ? 'Prueba con otro término.' : 'Crea tu primer documento para comenzar.'}</p>{!search && <button className="primary" onClick={onNew}>Crear factura</button>}</div>}
+      {totalVisible ? <div className="documentGroups">{grouped.map(group => {
+        if (!group.rows.length) return null
+        const info = homeStatusInfo[group.status]
+        return <section className={`documentGroup ${group.status}`} key={group.status}>
+          <div className="documentGroupHead"><div className="documentGroupTitle"><span className="documentGroupMark"/><div><strong>{info.title}</strong><small>{info.hint}</small></div></div><span className="documentGroupCount">{group.rows.length} {group.rows.length === 1 ? 'documento' : 'documentos'}</span></div>
+          <div className="list">{group.rows.map(invoiceRow)}</div>
+        </section>
+      })}</div> : <div className="empty"><ReceiptText size={34}/><h3>{search ? 'Sin resultados en esta sección' : 'No hay documentos aquí'}</h3><p>{search ? 'Prueba otro término o cambia el estado seleccionado.' : statusFilter === 'all' ? 'Crea tu primer documento para comenzar.' : `No tienes documentos en ${tabs.find(tab => tab.key === statusFilter)?.label.toLowerCase()}.`}</p>{!search && statusFilter === 'all' && <button className="primary" onClick={onNew}>Crear factura</button>}</div>}
     </section>
   </>
 }
