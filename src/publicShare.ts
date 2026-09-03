@@ -2,11 +2,20 @@ import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from './db'
 import { firebaseAuth, firestore } from './firebase'
 import { money, totals } from './pdf'
-import type { Company, Invoice } from './types'
+import type { Company, Invoice, PaymentDisplay } from './types'
 
 function shareId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '')
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
+}
+
+function availablePaymentMethods(company: Company): PaymentDisplay[] {
+  const methods: PaymentDisplay[] = []
+  if (company.mobilePaymentBank || company.mobilePaymentPhone || company.mobilePaymentId) methods.push('mobile')
+  if (company.bankName || company.bankAccountType || company.bankAccountNumber || company.bankAccountHolder) methods.push('bank')
+  if (company.binanceId) methods.push('binance')
+  if (company.paymentNotes) methods.push('notes')
+  return methods
 }
 
 function publicCompany(company: Company) {
@@ -36,7 +45,10 @@ export async function publishPublicDocument(invoice: Invoice, company: Company) 
   if (!invoice.id) throw new Error('Guarda el documento antes de compartirlo por enlace.')
 
   const id = invoice.publicShareId || shareId()
-  const total = totals(invoice).total
+  const documentTotals = totals(invoice)
+  const visiblePayments = invoice.paymentMethodsVisible !== undefined
+    ? invoice.paymentMethodsVisible
+    : availablePaymentMethods(company)
   const payload = {
     version: 1,
     active: true,
@@ -48,11 +60,11 @@ export async function publishPublicDocument(invoice: Invoice, company: Company) 
     date: invoice.date,
     dueDate: invoice.dueDate || '',
     currency: invoice.currency,
-    subtotal: totals(invoice).subtotal,
-    discount: totals(invoice).discount,
-    tax: totals(invoice).tax,
+    subtotal: documentTotals.subtotal,
+    discount: documentTotals.discount,
+    tax: documentTotals.tax,
     taxRate: invoice.taxRate,
-    total,
+    total: documentTotals.total,
     client: {
       name: invoice.client.name || 'Cliente',
       taxId: invoice.client.taxId || '',
@@ -69,7 +81,7 @@ export async function publishPublicDocument(invoice: Invoice, company: Company) 
     rateCapturedAt: invoice.rateCapturedAt || '',
     rateSnapshot: invoice.rateSnapshot || null,
     conversionTargets: invoice.conversionTargets || [],
-    paymentMethodsVisible: invoice.paymentMethodsVisible || [],
+    paymentMethodsVisible: visiblePayments,
     company: publicCompany(company),
     updatedAt: serverTimestamp(),
   }
@@ -81,10 +93,10 @@ export async function publishPublicDocument(invoice: Invoice, company: Company) 
   return {
     id,
     url: `${window.location.origin}/documento.html?id=${encodeURIComponent(id)}`,
-    total,
+    total: documentTotals.total,
   }
 }
 
 export function shareDocumentMessage(invoice: Invoice, url: string, total = totals(invoice).total) {
-  return `Hola ${invoice.client.name || ''}. Te comparto ${invoice.type.toLowerCase()} ${invoice.number} por ${money(total, invoice.currency)}.\n\nAbre este enlace para revisar el documento, copiar los datos de pago y cargar el voucher o capture cuando realices el pago:\n${url}\n\nDentro de la página también podrás descargar una copia del documento para conservarla como soporte.`
+  return `Hola ${invoice.client.name || ''}. Te comparto ${invoice.type.toLowerCase()} ${invoice.number} por ${money(total, invoice.currency)}.\n\nPulsa este enlace para revisar el documento, copiar los datos de pago y cargar el voucher o capture cuando realices el pago:\n${url}\n\nDentro de la página también podrás descargar tu documento en PDF para conservarlo como soporte.`
 }
