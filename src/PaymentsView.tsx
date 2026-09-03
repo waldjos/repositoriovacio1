@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, CircleDollarSign, Download, ExternalLink, FileCheck2, Plus, ReceiptText, Trash2, WalletCards, XCircle } from 'lucide-react'
 import { db } from './db'
+import { getActiveCompanyId } from './companyScope'
 import { firebaseAuth } from './firebase'
 import { money, totals } from './pdf'
 import { fetchLiveRates, getCachedRates, refreshRatesIfDue } from './rates'
@@ -33,6 +34,7 @@ const numberValue = (raw: string) => {
 const displayNumber = (value: number) => value.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function PaymentsView() {
+  const companyId = getActiveCompanyId()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [company, setCompany] = useState<Company | null>(null)
@@ -48,11 +50,11 @@ export default function PaymentsView() {
     const [invoiceRows, paymentRows, companyRow, nextRates] = await Promise.all([
       db.invoices.orderBy('updatedAt').reverse().toArray(),
       db.payments.orderBy('date').reverse().toArray(),
-      db.company.get(1),
+      db.company.get(companyId),
       forceRates ? fetchLiveRates(true).catch(() => getCachedRates()) : refreshRatesIfDue(),
     ])
-    setInvoices(invoiceRows)
-    setPayments(paymentRows)
+    setInvoices(invoiceRows.filter(row => (row.companyId || 1) === companyId))
+    setPayments(paymentRows.filter(row => (row.companyId || 1) === companyId))
     setCompany(companyRow || null)
     if (nextRates) setRates(nextRates)
   }
@@ -68,7 +70,7 @@ export default function PaymentsView() {
   const rateNumber = numberValue(draft.rate)
   const amountNumber = numberValue(draft.amount)
   const amountVes = selected ? paymentAmountVes(amountNumber, selected.currency, rateNumber) : 0
-  const visibleProofs = proofs.filter(proof => proof.status === 'pending' || proof.status === 'reviewing')
+  const visibleProofs = proofs.filter(proof => (proof.companyId || 1) === companyId && (proof.status === 'pending' || proof.status === 'reviewing'))
 
   function chooseInvoice(number: string) {
     const invoice = eligible.find(item => item.number === number)
@@ -112,13 +114,13 @@ export default function PaymentsView() {
       const url = await paymentProofFileUrl(proof.storagePath)
       window.open(url, '_blank', 'noopener,noreferrer')
     } catch {
-      setMessage('No se pudo abrir el comprobante. Verifica que Firebase Storage esté habilitado y sus reglas publicadas.')
+      setMessage('No se pudo abrir la imagen del comprobante. Intenta actualizar la pantalla.')
     }
   }
 
   async function useProof(proof: PaymentProofSubmission) {
     const invoice = eligible.find(item => item.number === proof.invoiceNumber)
-    if (!invoice) return setMessage(`No encontré ${proof.invoiceNumber} en las facturas disponibles.`)
+    if (!invoice) return setMessage(`No encontré ${proof.invoiceNumber} dentro del negocio activo.`)
     let nextRate = suggestedPaymentRate(invoice, rates)
     if (proof.paymentMethod === 'binance' && ['USD', 'USDT'].includes(invoice.currency.toUpperCase())) nextRate = Number(rates?.binanceBuy || rates?.usdtAverage) || nextRate
     const proofCurrency = (proof.amountCurrency || '').toUpperCase()
@@ -139,7 +141,7 @@ export default function PaymentsView() {
       date: proof.paymentDate || today(),
       rate: invoiceCurrency === 'VES' ? '1' : nextRate ? String(nextRate) : '',
       reference: proof.reference || '',
-      notes: [proof.note, `Comprobante recibido desde la factura ${invoice.number}.`].filter(Boolean).join(' '),
+      notes: [proof.note, `Comprobante recibido desde el enlace de ${invoice.number}.`].filter(Boolean).join(' '),
     })
     if (ownerUid) await setPaymentProofStatus(ownerUid, proof.id, 'reviewing').catch(() => undefined)
     setMessage('Comprobante cargado en el formulario. Revisa monto, tasa y referencia antes de registrar el cobro.')
@@ -163,6 +165,7 @@ export default function PaymentsView() {
       const now = new Date().toISOString()
       const proofId = activeProofId || undefined
       const payment: Payment = {
+        companyId,
         key: paymentKey(),
         invoiceNumber: selected.number,
         invoiceCurrency: selected.currency,
@@ -211,7 +214,7 @@ export default function PaymentsView() {
 
   return <main className="adminPage">
     <section className="adminHero paymentsHero">
-      <div><span>ZIVIFACTURA · CAJA</span><h1>Cobros, abonos y saldos</h1><p>Registra cada ingreso por separado. Los clientes también pueden enviar su voucher directamente desde la factura compartida para que lo revises antes de contabilizarlo.</p></div>
+      <div><span>ZIVIFACTURA · CAJA</span><h1>Cobros, abonos y saldos</h1><p>Registra cada ingreso del negocio activo por separado. Los clientes pueden enviar su voucher directamente desde el enlace compartido.</p></div>
       <button className="secondary" onClick={() => void load(true)}>Actualizar tasas</button>
     </section>
 
@@ -222,12 +225,12 @@ export default function PaymentsView() {
     </section>
 
     {ownerUid && <section className="card proofInbox">
-      <div className="adminCardHead"><div><span>COMPROBANTES RECIBIDOS</span><h2>Pagos enviados por tus clientes</h2><p>Estos vouchers todavía no modifican Caja. Abre el comprobante, valida el pago y luego cárgalo en el formulario para registrarlo.</p></div><FileCheck2 size={24}/></div>
+      <div className="adminCardHead"><div><span>COMPROBANTES RECIBIDOS</span><h2>Pagos enviados a este negocio</h2><p>Estos vouchers todavía no modifican Caja. Abre el comprobante, valida el pago y luego cárgalo en el formulario para registrarlo.</p></div><FileCheck2 size={24}/></div>
       {visibleProofs.length ? <div className="proofInboxList">{visibleProofs.map(proof => <article key={proof.id} className={activeProofId === proof.id ? 'active' : ''}>
         <div className="proofMain"><strong>{proof.invoiceNumber} · {proof.clientName || 'Cliente'}</strong><span>{proof.paymentDate || 'Sin fecha'} · {paymentMethodLabels[proof.paymentMethod] || 'Otro método'} · {proof.reference ? `Ref. ${proof.reference}` : 'Sin referencia'}</span><small>El cliente reportó {money(Number(proof.amountPaid) || 0, proof.amountCurrency || 'VES')}</small></div>
         <span className={`proofStatus ${proof.status}`}>{proof.status === 'reviewing' ? 'En revisión' : 'Pendiente'}</span>
         <div className="proofActions"><button className="secondary" onClick={() => void openProof(proof)}><ExternalLink size={15}/>Ver voucher</button><button className="primary" onClick={() => void useProof(proof)}><FileCheck2 size={15}/>Usar en cobro</button><button className="danger icon" title="Descartar comprobante" onClick={() => void rejectProof(proof)}><XCircle size={17}/></button></div>
-      </article>)}</div> : <div className="adminEmpty">Aún no tienes comprobantes pendientes. Cuando un cliente cargue un voucher desde una factura aparecerá aquí automáticamente.</div>}
+      </article>)}</div> : <div className="adminEmpty">No tienes comprobantes pendientes para este negocio.</div>}
     </section>}
 
     <section className="paymentsLayout">
@@ -251,7 +254,7 @@ export default function PaymentsView() {
 
       <section className="card ledgerCard">
         <div className="adminCardHead"><div><span>LIBRO DE CAJA</span><h2>Últimos movimientos</h2><p>Cada fila representa dinero realmente registrado como ingreso. Puedes volver a descargar el recibo en cualquier momento.</p></div></div>
-        {payments.length ? <div className="ledgerList">{payments.slice(0, 30).map(payment => { const invoice = invoices.find(item => item.number === payment.invoiceNumber); return <article key={payment.key}><div className="ledgerMain"><strong>{paymentMethodLabels[payment.method]}</strong><span>{payment.date} · {payment.invoiceNumber} · {invoice?.client.name || 'Cliente'}</span>{payment.reference && <small>Ref. {payment.reference}</small>}{payment.proofSubmissionId && <small>✓ Comprobante recibido desde la factura</small>}</div><div className="ledgerAmounts"><strong>{money(payment.amountApplied, payment.invoiceCurrency)}</strong><span>{money(payment.amountVes, 'VES')}</span></div><div className="actions"><button title="Descargar recibo" onClick={() => downloadReceipt(payment)}><Download size={16}/></button><button className="danger" title="Eliminar cobro" onClick={() => void removePayment(payment)}><Trash2 size={16}/></button></div></article>})}</div> : <div className="adminEmpty">Todavía no has registrado cobros. Selecciona una factura y registra el primer ingreso.</div>}
+        {payments.length ? <div className="ledgerList">{payments.slice(0, 30).map(payment => { const invoice = invoices.find(item => item.number === payment.invoiceNumber); return <article key={payment.key}><div className="ledgerMain"><strong>{paymentMethodLabels[payment.method]}</strong><span>{payment.date} · {payment.invoiceNumber} · {invoice?.client.name || 'Cliente'}</span>{payment.reference && <small>Ref. {payment.reference}</small>}{payment.proofSubmissionId && <small>✓ Comprobante recibido desde el enlace</small>}</div><div className="ledgerAmounts"><strong>{money(payment.amountApplied, payment.invoiceCurrency)}</strong><span>{money(payment.amountVes, 'VES')}</span></div><div className="actions"><button title="Descargar recibo" onClick={() => downloadReceipt(payment)}><Download size={16}/></button><button className="danger" title="Eliminar cobro" onClick={() => void removePayment(payment)}><Trash2 size={16}/></button></div></article>})}</div> : <div className="adminEmpty">Todavía no has registrado cobros en este negocio.</div>}
       </section>
     </section>
 
