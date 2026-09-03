@@ -23,6 +23,18 @@ class InvoiceDB extends Dexie {
       invoices: '++id, number, status, date, client.name, updatedAt',
       payments: '++id, &key, invoiceNumber, date, method, updatedAt'
     })
+    this.version(3).stores({
+      company: 'id, name',
+      clients: '++id, companyId, name, taxId, phone, email',
+      products: '++id, companyId, name, price',
+      invoices: '++id, companyId, number, status, date, client.name, updatedAt, publicShareId',
+      payments: '++id, &key, companyId, invoiceNumber, date, method, updatedAt'
+    }).upgrade(async tx => {
+      await tx.table('clients').toCollection().modify(row => { if (!row.companyId) row.companyId = 1 })
+      await tx.table('products').toCollection().modify(row => { if (!row.companyId) row.companyId = 1 })
+      await tx.table('invoices').toCollection().modify(row => { if (!row.companyId) row.companyId = 1 })
+      await tx.table('payments').toCollection().modify(row => { if (!row.companyId) row.companyId = 1 })
+    })
   }
 }
 
@@ -56,9 +68,17 @@ export async function ensureCompany() {
   if (!existing) await db.company.put(defaultCompany)
 }
 
+export async function createCompany(name = 'Nuevo negocio') {
+  const rows = await db.company.toArray()
+  const id = Math.max(0, ...rows.map(row => Number(row.id) || 0)) + 1
+  const company: Company = { ...defaultCompany, id, name, nextInvoiceNumber: 1 }
+  await db.company.put(company)
+  return company
+}
+
 export async function exportBackup(): Promise<BackupData> {
   return {
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     company: await db.company.toArray(),
     clients: await db.clients.toArray(),
@@ -69,16 +89,16 @@ export async function exportBackup(): Promise<BackupData> {
 }
 
 export async function importBackup(data: BackupData) {
-  if (!data || ![1, 2].includes(data.version) || !Array.isArray(data.invoices)) {
+  if (!data || ![1, 2, 3].includes(data.version) || !Array.isArray(data.invoices)) {
     throw new Error('El archivo de respaldo no es compatible.')
   }
   await db.transaction('rw', db.company, db.clients, db.products, db.invoices, db.payments, async () => {
     await Promise.all([db.company.clear(), db.clients.clear(), db.products.clear(), db.invoices.clear(), db.payments.clear()])
     if (data.company?.length) await db.company.bulkPut(data.company)
-    if (data.clients?.length) await db.clients.bulkPut(data.clients)
-    if (data.products?.length) await db.products.bulkPut(data.products)
-    if (data.invoices?.length) await db.invoices.bulkPut(data.invoices)
-    if (data.payments?.length) await db.payments.bulkPut(data.payments)
+    if (data.clients?.length) await db.clients.bulkPut(data.clients.map(row => ({ ...row, companyId: row.companyId || 1 })))
+    if (data.products?.length) await db.products.bulkPut(data.products.map(row => ({ ...row, companyId: row.companyId || 1 })))
+    if (data.invoices?.length) await db.invoices.bulkPut(data.invoices.map(row => ({ ...row, companyId: row.companyId || 1 })))
+    if (data.payments?.length) await db.payments.bulkPut(data.payments.map(row => ({ ...row, companyId: row.companyId || 1 })))
   })
   await ensureCompany()
 }
