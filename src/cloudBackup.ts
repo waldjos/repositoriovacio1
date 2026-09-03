@@ -3,7 +3,7 @@ import { pdfFile } from './pdf'
 import type { BackupData, Company, Invoice } from './types'
 
 let backupTimer: number | undefined
-let pendingInvoiceNumber = ''
+let pendingInvoiceKey = ''
 
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -56,27 +56,34 @@ async function postBackup(company: Company, invoice: Invoice) {
   }
 }
 
-async function sendLatestBackup(number: string) {
-  const [company, invoice] = await Promise.all([
-    db.company.get(1),
-    db.invoices.where('number').equals(number).last(),
-  ])
-  if (!company || !invoice) return
+function invoiceScheduleKey(invoice: Invoice) {
+  return `${Number(invoice.companyId) || 1}:${invoice.number}`
+}
+
+async function sendLatestBackup(key: string) {
+  const separator = key.indexOf(':')
+  const companyId = Math.max(1, Number(key.slice(0, separator)) || 1)
+  const number = separator >= 0 ? key.slice(separator + 1) : key
+  const matches = await db.invoices.where('number').equals(number).toArray()
+  const invoice = matches.filter(row => (Number(row.companyId) || 1) === companyId).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0]
+  if (!invoice) return
+  const company = await db.company.get(companyId)
+  if (!company) return
   await postBackup(company, invoice)
 }
 
-function schedule(number: string) {
-  if (!number) return
-  pendingInvoiceNumber = number
+function schedule(invoice: Invoice) {
+  if (!invoice.number) return
+  pendingInvoiceKey = invoiceScheduleKey(invoice)
   if (backupTimer) window.clearTimeout(backupTimer)
   backupTimer = window.setTimeout(() => {
-    const current = pendingInvoiceNumber
-    pendingInvoiceNumber = ''
+    const current = pendingInvoiceKey
+    pendingInvoiceKey = ''
     sendLatestBackup(current).catch(error => console.warn('[ZiviFactura] Respaldo automático pendiente:', error))
   }, 1800)
 }
 
 export function initAutomaticBackup() {
-  db.invoices.hook('creating', (_primaryKey, invoice) => schedule(invoice.number))
-  db.invoices.hook('updating', (_changes, _primaryKey, invoice) => schedule(invoice.number))
+  db.invoices.hook('creating', (_primaryKey, invoice) => schedule(invoice))
+  db.invoices.hook('updating', (_changes, _primaryKey, invoice) => schedule(invoice))
 }
