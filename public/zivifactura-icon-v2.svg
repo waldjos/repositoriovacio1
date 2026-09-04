@@ -1,30 +1,45 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ZiviFactura">
   <defs>
-    <linearGradient id="bg" x1="72" y1="48" x2="440" y2="464" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#13254f"/>
-      <stop offset="0.52" stop-color="#1f5eff"/>
-      <stop offset="1" stop-color="#16c7d9"/>
-    </linearGradient>
-    <linearGradient id="shine" x1="138" y1="112" x2="382" y2="394" gradientUnits="userSpaceOnUse">
+    <linearGradient id="panel" x1="52" y1="40" x2="458" y2="472" gradientUnits="userSpaceOnUse">
       <stop stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#dcecff"/>
+      <stop offset=".58" stop-color="#f7fbff"/>
+      <stop offset="1" stop-color="#edf6ff"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#071327" flood-opacity=".28"/>
+    <linearGradient id="blue" x1="90" y1="92" x2="382" y2="177" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00e5ff"/>
+      <stop offset=".48" stop-color="#009cff"/>
+      <stop offset="1" stop-color="#1748c9"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="335" y1="132" x2="156" y2="344" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffe36a"/>
+      <stop offset=".48" stop-color="#ffc107"/>
+      <stop offset="1" stop-color="#ff9e00"/>
+    </linearGradient>
+    <linearGradient id="pink" x1="145" y1="330" x2="397" y2="405" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8d1bc7"/>
+      <stop offset=".38" stop-color="#d80aa8"/>
+      <stop offset="1" stop-color="#ff2d9b"/>
+    </linearGradient>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#0b3d91" flood-opacity=".18"/>
+    </filter>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="18"/>
     </filter>
   </defs>
-
-  <rect width="512" height="512" rx="118" fill="#081226"/>
-  <rect x="34" y="34" width="444" height="444" rx="102" fill="url(#bg)"/>
-  <path d="M80 151C121 88 184 58 256 58c85 0 159 43 201 109" fill="none" stroke="#ffffff" stroke-opacity=".11" stroke-width="22" stroke-linecap="round"/>
-
+  <rect x="18" y="18" width="476" height="476" rx="118" fill="url(#panel)" stroke="#dbeeff" stroke-width="5"/>
+  <ellipse cx="144" cy="98" rx="92" ry="42" fill="#00dff5" opacity=".10" filter="url(#soft)"/>
+  <ellipse cx="378" cy="412" rx="94" ry="48" fill="#ff2d9b" opacity=".09" filter="url(#soft)"/>
   <g filter="url(#shadow)">
-    <path d="M154 132h204a22 22 0 0 1 22 22v204a22 22 0 0 1-22 22H154a22 22 0 0 1-22-22V154a22 22 0 0 1 22-22Z" fill="#081a38" fill-opacity=".72" stroke="#ffffff" stroke-opacity=".18" stroke-width="3"/>
-    <path d="M178 176h156a18 18 0 0 1 12 31L226 317h113a17 17 0 1 1 0 34H180a18 18 0 0 1-12-31l120-110H178a17 17 0 1 1 0-34Z" fill="url(#shine)"/>
-    <path d="M173 177h77" stroke="#58e8f1" stroke-width="9" stroke-linecap="round"/>
-    <path d="M263 350h76" stroke="#7dd3fc" stroke-width="9" stroke-linecap="round"/>
-    <circle cx="349" cy="176" r="8" fill="#6ee7f2"/>
+    <path d="M91 126C146 73 243 65 333 91c51 15 84 42 91 74-47-21-103-23-162-5-52 16-101 26-142 14-28-8-50-25-67-49 11 8 24 9 38 1Z" fill="url(#blue)"/>
+    <path d="M352 123c45 28 54 69 28 111-31 50-84 77-132 101-47 24-78 47-83 82-25-20-39-48-31-76 10-39 49-68 109-101 59-33 97-66 109-117Z" fill="url(#gold)"/>
+    <path d="M166 345c28 16 62 17 100 5 56-18 110-12 157 27-11 30-33 53-66 67-49-26-94-31-135-16-43 15-80 8-108-21-18-19-25-42-22-69 19 9 43 11 74 7Z" fill="url(#pink)"/>
+    <path d="M104 122c48 31 96 34 143 17 34-12 71-15 111-9" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" opacity=".44"/>
+    <path d="M343 128c25 39 11 76-41 112" fill="none" stroke="#fff4bc" stroke-width="7" stroke-linecap="round" opacity=".55"/>
+    <path d="M151 349c36 20 74 20 113 7 48-16 91-8 132 19" fill="none" stroke="#ffb4e2" stroke-width="7" stroke-linecap="round" opacity=".45"/>
   </g>
-
-  <path d="M399 354v36m-18-18h36" stroke="#ffffff" stroke-width="12" stroke-linecap="round" opacity=".95"/>
+  <g opacity=".72">
+    <rect x="332" y="261" width="104" height="126" rx="24" fill="#f3f8ff" stroke="#bcdcff" stroke-width="5"/>
+    <path d="M355 299h56M355 326h56M355 353h40" stroke="#5b86bd" stroke-width="11" stroke-linecap="round"/>
+  </g>
 </svg>
