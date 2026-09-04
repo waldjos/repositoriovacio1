@@ -1,0 +1,124 @@
+/* ZiviFactura v2 — light product system derived from Zivi Dynamics brand */
+:root{
+  --zivi-navy:#0b1f3e;
+  --zivi-navy-2:#173c72;
+  --zivi-blue:#079cff;
+  --zivi-cyan:#00dff5;
+  --zivi-gold:#ffc32f;
+  --zivi-magenta:#ff2d9b;
+  --zivi-violet:#7b3dff;
+  --zivi-success:#17c98b;
+  --zivi-surface:#ffffff;
+  --zivi-soft:#f5f9ff;
+  --zivi-line:#dce8f5;
+  --zivi-text:#102348;
+  --zivi-muted:#65779a;
+  --accent:var(--zivi-blue);
+  --accent-dark:#126bd9;
+  --accent-cyan:var(--zivi-cyan);
+  --accent-violet:var(--zivi-violet);
+  --accent-soft:#eaf6ff;
+  --border:var(--zivi-line);
+  --muted:var(--zivi-muted);
+  --panel:#fff;
+  --ink:var(--zivi-text);
+  --navy:var(--zivi-navy);
+}
+html,body,#root{max-width:100%;overflow-x:hidden}
+body{
+  color:var(--zivi-text);
+  background:
+    radial-gradient(circle at 8% 3%,rgba(0,223,245,.13),transparent 24%),
+    radial-gradient(circle at 92% 10%,rgba(123,61,255,.08),transparent 23%),
+    linear-gradient(180deg,#fbfdff 0%,#f3f8ff 54%,#f8fbff 100%);
+}
+body.zivi-v2-active{padding-bottom:94px}
+body.zivi-v2-active #root{padding-top:76px}
+body.zivi-v2-active .accountBar,
+body.zivi-v2-active .businessBar,
+body.zivi-v2-active .top{display:none!important}
+
+/* Global product header */
+.ziviChrome{
+  position:fixed;z-index:120;top:0;left:0;right:0;height:76px;
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+  padding:10px max(18px,calc((100vw - 1440px)/2 + 24px));
+  background:rgba(255,255,255,.88);backdrop-filter:blur(22px) saturate(140%);
+  border-bottom:1px solid rgba(197,216,238,.82);
+  box-shadow:0 12px 34px rgba(28,72,128,.08)
+}
+.ziviChromeBrand{border:0;background:transparent;padding:0;display:flex;align-items:center;gap:11px;color:var(--zivi-text);min-width:0;text-align:left}
+.ziviChromeBrand img{width:48px;height:48px;border-radius:15px;box-shadow:0 8px 22px rgba(0,156,255,.16);flex:none}
+.ziviChromeBrand strong{display:block;font-size:1.22rem;letter-spacing:-.04em;color:var(--zivi-navy);white-space:nowrap}
+.ziviChromeBrand strong>span{background:linear-gradient(90deg,var(--zivi-blue),#26a8ff 55%,var(--zivi-violet));-webkit-background-clip:text;background-clip:text;color:transparent}
+.ziviChromeBrand small{display:block;margin-top:2px;font-size:.59rem;letter-spacing:.19em;color:#7284a4;white-space:nowrap}
+.ziviChromeActions{display:flex;align-items:center;gap:8px;min-width:0}
+.ziviChromeBell,.ziviAddBusiness,.ziviLogout{width:42px;height:42px;border:1px solid #dbe7f4;border-radius:14px;background:#fff;color:#335982;display:grid;place-items:center;box-shadow:0 5px 16px rgba(26,67,116,.06)}
+.ziviChromeBell{position:relative}.ziviChromeBell i{position:absolute;width:8px;height:8px;border-radius:50%;background:var(--zivi-magenta);right:8px;top:7px;box-shadow:0 0 0 3px #fff}
+.ziviBusinessSelect{height:48px;min-width:170px;max-width:260px;position:relative;display:flex;align-items:center;gap:9px;padding:0 36px 0 13px;border:1px solid #dbe7f4;border-radius:16px;background:#fff;color:#335982;box-shadow:0 6px 18px rgba(27,69,117,.06);overflow:hidden}
+.ziviBusinessSelect>span{min-width:0;display:grid;line-height:1.05}.ziviBusinessSelect small{font-size:.58rem;color:#8493ad;text-transform:uppercase;letter-spacing:.08em}.ziviBusinessSelect strong{font-size:.82rem;color:#15294a;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ziviBusinessSelect select{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.ziviAddBusiness{color:var(--zivi-blue);background:linear-gradient(145deg,#f8fdff,#edf8ff)}
+
+/* Main surface / common cards */
+.page,.adminPage,.paymentsPage,.receivablesPage{max-width:1440px!important;margin:0 auto!important}
+.card,.metric,.documentGroup,.adminCard,.incomeMainCard,.incomeEquivalents article,.statsMetrics article,.paymentStatGrid article{
+  border-color:#dce8f5!important;background:rgba(255,255,255,.96)!important;
+  box-shadow:0 12px 36px rgba(25,71,127,.07)!important
+}
+.card{border-radius:22px!important}
+.primary,.heroButton,.quickApply{
+  background:linear-gradient(135deg,var(--zivi-cyan),var(--zivi-blue) 56%,#1267ed)!important;
+  border-color:transparent!important;color:#fff!important;box-shadow:0 10px 24px rgba(0,156,255,.22)!important
+}
+.secondary{background:#fff!important;border-color:#d8e5f4!important;color:#244466!important}
+
+/* Billing home */
+.hero{
+  color:var(--zivi-text)!important;
+  background:
+    radial-gradient(circle at 82% 18%,rgba(0,223,245,.16),transparent 26%),
+    radial-gradient(circle at 94% 90%,rgba(255,45,155,.09),transparent 22%),
+    linear-gradient(135deg,#fff 0%,#f5fbff 65%,#edf8ff 100%)!important;
+  border:1px solid #dbe9f6!important;border-radius:28px!important;
+  box-shadow:0 18px 48px rgba(22,67,122,.08)!important
+}
+.hero:before{background:linear-gradient(110deg,transparent 58%,rgba(0,156,255,.06))!important}.hero:after{border-color:rgba(0,156,255,.06)!important}
+.hero span{color:var(--zivi-blue)!important}.hero h1{color:var(--zivi-navy)!important}.hero p{color:#65799c!important}
+.heroButton{background:#fff!important;color:#126edc!important;border:1px solid #d8e8f7!important;box-shadow:0 10px 24px rgba(25,75,133,.08)!important}
+.metrics{gap:14px!important}.metric{border-radius:20px!important;min-height:112px}.metric:before{width:0!important}.metric:after{content:"";position:absolute;width:56px;height:56px;border-radius:18px;right:14px;top:14px;background:linear-gradient(145deg,rgba(0,156,255,.13),rgba(0,223,245,.08))}.metric:nth-child(2):after{background:linear-gradient(145deg,rgba(255,195,47,.20),rgba(255,195,47,.08))}.metric:nth-child(3):after{background:linear-gradient(145deg,rgba(23,201,139,.17),rgba(0,223,245,.08))}.metric span{color:#6b7f9f!important}.metric strong{color:var(--zivi-navy)!important;font-size:1.5rem!important}
+.documentBoard{background:rgba(255,255,255,.93)!important}.documentBoardIntro h2{font-size:1.35rem;color:var(--zivi-navy)}.documentBoardIntro p{color:#72829c}
+.documentTabs{background:#f5f9ff!important;border-color:#dce8f5!important;padding:7px!important}.documentTabs button{border-radius:14px!important;color:#6b7892!important}.documentTabs button.active{background:#fff!important;color:#0d78e8!important;border-color:#cae3fb!important;box-shadow:0 8px 22px rgba(0,128,255,.09)!important}.documentTabs button.active b{background:#e8f5ff!important;color:#0878e9!important}
+.documentGroup{border-radius:18px!important;overflow:hidden}.documentGroupHead{background:#f8fbff!important;border-color:#e4edf7!important}.documentGroup.issued .documentGroupMark{background:var(--zivi-gold)!important}.documentGroup.paid .documentGroupMark{background:var(--zivi-success)!important}.documentGroup.cancelled .documentGroupMark{background:var(--zivi-magenta)!important}
+.row{border-color:#edf3f9!important}.fileIcon{background:linear-gradient(145deg,#e9f8ff,#edf3ff)!important;color:var(--zivi-blue)!important;border:1px solid #d9ebfa}.status.issued{background:#fff7df!important;color:#a66700!important}.status.paid{background:#e7fbf3!important;color:#087a52!important}.status.cancelled{background:#fff0f7!important;color:#c11f71!important}.status.draft{background:#eef3f9!important;color:#536883!important}
+.search{background:#f8fbff!important;border-color:#dbe7f3!important}
+
+/* Editor */
+.editorGrid{gap:18px!important}.editorHead h1{color:var(--zivi-navy)!important}.formCard{background:#fff!important}.formCard h2{color:#142a4d!important}.field input,.field select,.field textarea,.item input{background:#fbfdff!important;border-color:#dbe7f4!important;color:#142542!important;border-radius:13px!important}.field input:focus,.field select:focus,.field textarea:focus,.item input:focus{border-color:#84c9ff!important;box-shadow:0 0 0 3px rgba(0,156,255,.10)!important}.item{background:#fbfdff!important}.itemTotal{background:#edf8ff!important}.summary{border-top:0!important;background:linear-gradient(180deg,#fff,#f8fbff)!important;box-shadow:0 14px 38px rgba(20,67,124,.09)!important}.summary>span{color:#0d7fe9!important}.total strong{color:#0b8eff!important}.pdfChoiceBlock,.paymentGroup,.ratePreview{background:#f8fbff!important;border-color:#dce8f5!important}
+
+/* Admin / income / receivables / payments */
+.adminHero{
+  color:var(--zivi-text)!important;
+  background:linear-gradient(135deg,#fff 0%,#f3fbff 58%,#eef6ff 100%)!important;
+  border:1px solid #dce9f6!important;box-shadow:0 16px 42px rgba(22,68,122,.08)!important
+}
+.adminHero:after{border-color:rgba(0,156,255,.06)!important}.adminHero span{color:#0a8fe9!important}.adminHero h1{color:var(--zivi-navy)!important}.adminHero p{color:#657a9d!important}.incomeMainCard{color:var(--zivi-text)!important;background:linear-gradient(135deg,#fff,#eff9ff)!important}.incomeMainCard>span{color:#6681a6!important}.incomeMainCard>strong{color:var(--zivi-navy)!important}.incomeMainCard>small{color:#6c7d98!important}.adminIcon{background:#e9f7ff!important;color:#0a91ec!important}.trendRow i,.distributionList i{background:linear-gradient(90deg,var(--zivi-blue),var(--zivi-cyan))!important}
+.periodTabs{background:#fff!important;border-color:#dce8f5!important}.periodTabs button.active{background:#eaf6ff!important;color:#087be8!important}
+
+/* Quick calculator + dock */
+.quickBackdrop{background:rgba(12,37,68,.22)!important;backdrop-filter:blur(5px)!important}.quickCalculatorSheet,.quickMoreSheet{background:rgba(255,255,255,.98)!important;border-color:#d7e6f4!important;box-shadow:0 26px 70px rgba(19,59,111,.20)!important}.quickCalcMain,.quickRates{background:#f8fbff!important;border-color:#dce8f5!important}.quickSheetHead h2,.quickMoreSheet h2{color:var(--zivi-navy)!important}.quickSheetHead>div>span,.quickMoreSheet header>div>span{color:#0b8ff0!important}.quickExpression input{border-color:#cfe4f7!important;background:#fff!important;color:var(--zivi-navy)!important}.quickResult{background:linear-gradient(135deg,#f8fcff 0%,#edf8ff 62%,#f8f1ff 100%)!important;color:var(--zivi-navy)!important;border:1px solid #d7e8f7!important;box-shadow:inset 0 1px 0 #fff}.quickResult>span{color:#55759c!important}.quickResult>strong{color:#086ee0!important}.quickResult>button{background:#fff!important;color:#0877e8!important;border-color:#cfe2f6!important}.quickResultMeta{grid-column:1/-1;color:#687c9d;font-size:.69rem;line-height:1.4;margin-top:2px}.quickCurrencyRow button.active{background:#e9f6ff!important;border-color:#96cdf8!important;color:#0879e9!important}.quickKeypad button{background:#fff!important;border-color:#dce8f5!important;color:#213a60!important}.quickKeypad button.operator{background:#eaf6ff!important;color:#087ae8!important}.quickRatesHead>button{color:#087ae8!important}.quickRateList>button,.quickEquivalentBlock>button{background:#fff!important;border-color:#dce8f5!important}.quickMoreGrid>button{background:#fbfdff!important;border-color:#dce8f5!important}.quickMoreGrid>button>svg{background:#eaf7ff!important;color:#0787eb!important}
+.quickDock{background:rgba(255,255,255,.94)!important;border:1px solid #d7e5f3!important;box-shadow:0 18px 46px rgba(18,60,113,.16)!important}.quickDock button{color:#617392!important}.quickDock button.active,.quickDock button.tool.active{background:linear-gradient(145deg,#edf8ff,#f3f7ff)!important;color:#087be8!important}.quickDock button.active:after{content:"";position:absolute;bottom:2px;width:28px;height:3px;border-radius:99px;background:linear-gradient(90deg,var(--zivi-cyan),var(--zivi-blue))}.quickDock button{position:relative}.quickFab{left:50%!important;right:auto!important;transform:translateX(-50%)!important;width:58px!important;height:58px!important;min-height:58px!important;padding:0!important;border-radius:50%!important;bottom:79px!important;background:linear-gradient(145deg,var(--zivi-cyan),var(--zivi-blue) 58%,#1264ed)!important;box-shadow:0 13px 30px rgba(0,143,255,.32)!important}.quickFab span{display:none!important}
+.inlineCalcButton{background:linear-gradient(145deg,#e9f8ff,#edf3ff)!important;border-color:#cfe4f6!important;color:#0879e9!important;font-size:0!important}.inlineCalcButton:after{content:"";width:18px;height:18px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230879e9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='2' width='16' height='20' rx='2'/%3E%3Cline x1='8' y1='6' x2='16' y2='6'/%3E%3Cline x1='8' y1='10' x2='8' y2='10'/%3E%3Cline x1='12' y1='10' x2='12' y2='10'/%3E%3Cline x1='16' y1='10' x2='16' y2='10'/%3E%3Cline x1='8' y1='14' x2='8' y2='14'/%3E%3Cline x1='12' y1='14' x2='12' y2='14'/%3E%3Cline x1='16' y1='14' x2='16' y2='14'/%3E%3Cline x1='8' y1='18' x2='8' y2='18'/%3E%3Cline x1='12' y1='18' x2='12' y2='18'/%3E%3Cline x1='16' y1='18' x2='16' y2='18'/%3E%3C/svg%3E") center/contain no-repeat}
+
+/* Footer */
+.appFooter,.appLegalFooter{background:transparent!important;border-color:#e3edf6!important;color:#7890ac!important}.appFooter a,.appLegalFooter a{color:#5e7592!important}
+
+@media(max-width:760px){
+  body.zivi-v2-active #root{padding-top:68px}
+  .ziviChrome{height:68px;padding:8px 10px;gap:8px}.ziviChromeBrand img{width:42px;height:42px;border-radius:13px}.ziviChromeBrand strong{font-size:1.04rem}.ziviChromeBrand small{font-size:.49rem;letter-spacing:.13em}.ziviChromeActions{gap:5px}.ziviChromeBell,.ziviAddBusiness,.ziviLogout{width:38px;height:38px;border-radius:12px}.ziviLogout{display:none}.ziviBusinessSelect{min-width:0;width:118px;height:42px;padding:0 25px 0 9px;border-radius:13px}.ziviBusinessSelect>svg{display:none}.ziviBusinessSelect small{display:none}.ziviBusinessSelect strong{font-size:.74rem}.ziviAddBusiness{display:none}
+  .page,.adminPage{padding-top:16px!important}.hero{padding:26px 20px!important;border-radius:24px!important}.hero h1{font-size:1.85rem!important}.metrics{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px!important}.metric{min-height:105px!important;padding:15px 12px!important}.metric:after{width:38px;height:38px;border-radius:13px;right:9px;top:9px}.metric strong{font-size:1rem!important;overflow-wrap:anywhere}.metric span{font-size:.65rem!important;padding-right:24px}
+  .documentBoard{padding:15px!important}.documentTabs{display:flex!important;overflow:auto!important;gap:6px!important}.documentTabs button{flex:0 0 120px!important;min-height:52px!important}.documentGroupHead{padding:10px!important}.row{border:1px solid #e3edf7!important;border-radius:14px!important;margin:8px 0!important;padding:11px!important;background:#fff!important;box-shadow:0 6px 18px rgba(24,68,119,.05)!important}.documentGroup .list{padding:0 8px 6px!important}.row .amount{padding-left:53px!important}
+  .quickCalculatorSheet,.quickMoreSheet{bottom:82px!important;background:#fff!important}.quickResult>strong{font-size:1.45rem!important}.quickResultMeta{font-size:.67rem}.quickFab{bottom:76px!important;width:56px!important;height:56px!important;min-height:56px!important}.quickDock{bottom:6px!important;border-radius:22px!important}.quickDock button:nth-child(3){margin-right:24px}.quickDock button:nth-child(4){margin-left:24px}
+}
+@media(max-width:430px){
+  .ziviChromeBrand small{display:none}.ziviChromeBrand strong{font-size:.96rem}.ziviBusinessSelect{width:104px}.metrics{grid-template-columns:1fr!important}.metric{min-height:82px!important}.metric strong{font-size:1.25rem!important}.hero h1{font-size:1.65rem!important}.quickDock button span{font-size:.54rem!important}.quickDock button:nth-child(3){margin-right:18px}.quickDock button:nth-child(4){margin-left:18px}
+}
