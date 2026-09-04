@@ -76,13 +76,17 @@ function evaluateExpression(raw: string): number | null {
   }
 }
 
+function locale(value: number, digits = 2) {
+  return Number(value).toLocaleString('es-VE', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+}
+
 function plain(value: number, digits = 2) {
   return Number(value).toLocaleString('es-VE', { useGrouping: false, minimumFractionDigits: digits, maximumFractionDigits: digits })
 }
 
 function formatValue(value: number, currency: CalcCurrency) {
   if (!Number.isFinite(value)) return 'N/D'
-  return `${Number(value).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
+  return currency === 'VES' ? `Bs ${locale(value)}` : `${locale(value)} ${currency}`
 }
 
 async function copyNumber(value: number) {
@@ -106,6 +110,13 @@ function rateForCurrency(currency: CalcCurrency, rates: LiveRates | null) {
   if (currency === 'USD') return Number(rates?.usdBcv) || 0
   if (currency === 'EUR') return Number(rates?.eurBcv) || 0
   return Number(rates?.binanceBuy || rates?.usdtAverage) || 0
+}
+
+function rateName(currency: CalcCurrency) {
+  if (currency === 'USD') return 'USD BCV'
+  if (currency === 'EUR') return 'EUR BCV'
+  if (currency === 'USDT') return 'USDT Binance'
+  return 'VES'
 }
 
 function convert(value: number, from: CalcCurrency, to: CalcCurrency, rates: LiveRates | null) {
@@ -179,6 +190,16 @@ export default function QuickTools() {
     }).filter(Boolean) as Array<{ currency: CalcCurrency; value: number }>
   }, [result, currency, rates])
 
+  const primaryCurrency: CalcCurrency = contextInput ? currency : currency === 'VES' ? 'USD' : 'VES'
+  const primaryValue = result == null ? null : contextInput ? result : convert(result, currency, primaryCurrency, rates)
+  const sourceRate = rateForCurrency(currency, rates)
+  const primaryLabel = contextInput ? 'Resultado del cálculo' : primaryCurrency === 'VES' ? 'Equivalente en bolívares' : 'Equivalente en dólares'
+  const primaryMeta = !contextInput && result != null
+    ? currency === 'VES'
+      ? `Base: ${formatValue(result, currency)} · Conversión con ${rateName(primaryCurrency)}`
+      : `Base: ${formatValue(result, currency)} · Tasa ${rateName(currency)} ${sourceRate ? `${locale(sourceRate)} Bs` : 'no disponible'}`
+    : ''
+
   useEffect(() => {
     const sync = () => {
       const nav = document.querySelector('.workspaceNav')
@@ -205,7 +226,7 @@ export default function QuickTools() {
           event.preventDefault()
           event.stopPropagation()
           setContextInput(input)
-          setContextTitle('Calcular precio del producto')
+          setContextTitle('Calculadora de precio')
           setCurrency(detectInvoiceCurrency())
           setExpression(input.value && Number(input.value.replace(',', '.')) !== 0 ? input.value : '')
           setMoreOpen(false)
@@ -288,7 +309,7 @@ export default function QuickTools() {
       <div className="quickCalcWorkspace">
         <div className="quickCalcMain">
           <label className="quickExpression"><span>Operación</span><input autoFocus inputMode="decimal" value={expression} onChange={event => setExpression(event.target.value)} placeholder="Ej. 4,80 × 150"/></label>
-          <div className="quickResult"><span>Resultado</span><strong>{result == null ? '—' : formatValue(result, currency)}</strong><button disabled={result == null} onClick={() => result != null && void copyNumber(result)}><Copy size={16}/>Copiar</button></div>
+          <div className="quickResult"><span>{primaryLabel}</span><strong>{primaryValue == null ? '—' : formatValue(primaryValue, primaryCurrency)}</strong><button disabled={primaryValue == null} onClick={() => primaryValue != null && void copyNumber(primaryValue)}><Copy size={16}/>Copiar</button>{primaryMeta && <small className="quickResultMeta">{primaryMeta}</small>}</div>
           <div className="quickCurrencyRow"><span>Moneda del cálculo</span><div>{(['USD', 'VES', 'EUR', 'USDT'] as CalcCurrency[]).map(item => <button className={currency === item ? 'active' : ''} key={item} onClick={() => setCurrency(item)}>{item}</button>)}</div></div>
           <div className="quickKeypad">
             {['7','8','9','÷','4','5','6','×','1','2','3','-','0',',','%','+','(',')','⌫','='].map(key => <button key={key} className={['÷','×','-','+','='].includes(key) ? 'operator' : ''} onClick={() => {
@@ -302,8 +323,8 @@ export default function QuickTools() {
 
         <aside className="quickRates">
           <div className="quickRatesHead"><div><span>TASAS ACTUALES</span><strong>Consulta y copia</strong></div><button disabled={loadingRates} onClick={() => void refreshRates()} title="Actualizar tasas"><RefreshCw size={17} className={loadingRates ? 'spin' : ''}/></button></div>
-          <div className="quickRateList">{rateRows.length ? rateRows.map(row => <button key={row.label} onClick={() => void copyNumber(row.value)}><span>{row.label}</span><strong>{plain(row.value)} Bs</strong><Copy size={14}/></button>) : <p>No hay tasas disponibles en caché. Pulsa actualizar.</p>}</div>
-          {result != null && <div className="quickEquivalentBlock"><span>EQUIVALENTES DEL RESULTADO</span>{equivalents.map(item => <button key={item.currency} onClick={() => void copyNumber(item.value)}><span>{item.currency}</span><strong>{formatValue(item.value, item.currency)}</strong><Copy size={14}/></button>)}</div>}
+          <div className="quickRateList">{rateRows.length ? rateRows.map(row => <button key={row.label} onClick={() => void copyNumber(row.value)}><span>{row.label}</span><strong>{locale(row.value)} Bs</strong><Copy size={14}/></button>) : <p>No hay tasas disponibles en caché. Pulsa actualizar.</p>}</div>
+          {result != null && <div className="quickEquivalentBlock"><span>EQUIVALENTES DEL RESULTADO</span>{equivalents.filter(item => item.currency !== currency).map(item => <button key={item.currency} onClick={() => void copyNumber(item.value)}><span>{item.currency}</span><strong>{formatValue(item.value, item.currency)}</strong><Copy size={14}/></button>)}</div>}
         </aside>
       </div>
     </section>}
