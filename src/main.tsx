@@ -9,6 +9,7 @@ import './payments.css'
 import './proofs.css'
 import './business.css'
 import './zivi-v2.css'
+import './brand-fixes.css'
 
 initAutomaticBackup()
 
