@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Bell, Building2, LogOut, Plus } from 'lucide-react'
+import { Bell, Building2, ChevronDown, LogOut, Plus } from 'lucide-react'
 import { createCompany, db, ensureCompany } from './db'
 import { getActiveCompanyId, setActiveCompanyId } from './companyScope'
-import { OFFICIAL_ZIVI_LOGO } from './officialZiviLogo'
 import type { Company } from './types'
 
 function clickWorkspace(index: number) {
@@ -15,6 +14,7 @@ export default function ZiviChrome() {
   const [available, setAvailable] = useState(false)
   const [companies, setCompanies] = useState<Company[]>([])
   const [activeId, setActiveIdState] = useState(getActiveCompanyId())
+  const [logoFallback, setLogoFallback] = useState(false)
 
   async function loadCompanies() {
     await ensureCompany()
@@ -72,21 +72,31 @@ export default function ZiviChrome() {
 
   return <header className="ziviChrome" aria-label="Cabecera de ZiviFactura">
     <button className="ziviChromeBrand ziviInstitutionalLockup" onClick={() => clickWorkspace(0)} aria-label="Ir al inicio">
-      <span className="ziviOfficialLogoFrame" aria-hidden="true"><img src={OFFICIAL_ZIVI_LOGO} alt=""/></span>
-      <span className="ziviProductLockup"><strong>Zivi<span>Factura</span></strong><small>por Zivi Dynamics C.A. · SOLUCIONES DIGITALES</small></span>
+      <span className="ziviOfficialLogoFrame" aria-hidden="true">
+        <img
+          src={logoFallback ? '/zivifactura-icon-v2.svg?v=3' : '/zivi-official-logo.svg?v=1'}
+          alt=""
+          onError={() => setLogoFallback(true)}
+        />
+      </span>
+      <span className="ziviProductLockup">
+        <strong>Zivi<span>Factura</span></strong>
+        <small>por Zivi Dynamics C.A.</small>
+      </span>
     </button>
 
     <div className="ziviChromeActions">
-      <button className="ziviChromeBell" onClick={() => clickWorkspace(2)} title="Ver cobros y comprobantes"><Bell size={19}/><i/></button>
+      <button className="ziviChromeBell" onClick={() => clickWorkspace(2)} title="Ver cobros y comprobantes" aria-label="Ver cobros y comprobantes"><Bell size={19}/><i/></button>
       <label className="ziviBusinessSelect" title={`Negocio activo: ${activeName}`}>
-        <Building2 size={18}/>
+        <Building2 size={17}/>
         <span><small>Negocio activo</small><strong>{activeName}</strong></span>
+        <ChevronDown className="ziviBusinessChevron" size={15}/>
         <select aria-label="Negocio activo" value={activeId} onChange={event => changeBusiness(Number(event.target.value))}>
           {companies.map(company => <option key={company.id} value={company.id}>{company.name || `Negocio ${company.id}`}</option>)}
         </select>
       </label>
-      <button className="ziviAddBusiness" onClick={() => void addBusiness()} title="Agregar otro negocio"><Plus size={18}/></button>
-      {document.querySelector('.accountIdentity') && <button className="ziviLogout" onClick={logout} title="Cerrar sesión"><LogOut size={18}/></button>}
+      <button className="ziviAddBusiness" onClick={() => void addBusiness()} title="Agregar otro negocio" aria-label="Agregar otro negocio"><Plus size={18}/></button>
+      {document.querySelector('.accountIdentity') && <button className="ziviLogout" onClick={logout} title="Cerrar sesión" aria-label="Cerrar sesión"><LogOut size={18}/></button>}
     </div>
   </header>
 }
