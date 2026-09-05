@@ -10,6 +10,7 @@ import './proofs.css'
 import './business.css'
 import './zivi-v2.css'
 import './brand-fixes.css'
+import './polish-v22.css'
 
 initAutomaticBackup()
 
